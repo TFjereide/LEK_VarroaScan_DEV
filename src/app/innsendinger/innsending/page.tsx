@@ -5,16 +5,25 @@ import { appendAdminContext } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
+// NYTT: database-utility for ny database (samler queries for submissions/images)
+import {
+  fetchSubmissionById,
+  getSignedImageUrls,
+  type SubmissionWithImages,
+} from "@/lib/varroaScanDb";
 
 type SubmissionStatus = "NY" | "UNDER_ARBEID" | "ARKIVERT" | string;
 
-type VarroaSubmission = {
-  id: string;
-  created_at: string;
-  note: string | null;
-  status: SubmissionStatus;
-  images: string[];
-};
+// GAMMEL (varroa_submissions - én tabell, bilder som text[]):
+// type VarroaSubmission = {
+//   id: string;
+//   created_at: string;
+//   note: string | null;
+//   status: SubmissionStatus;
+//   images: string[];
+// };
+// NY: bruker SubmissionWithImages fra lib/varroaScanDb.ts (submissions + images-tabellene)
+type VarroaSubmission = SubmissionWithImages;
 
 type SignedImage = { path: string; url: string };
 
@@ -116,40 +125,59 @@ export function InnsendingPage({
         return;
       }
 
-      const res = await supabase
-        .from("varroa_submissions")
-        .select("id,created_at,note,status,images")
-        .eq("id", id)
-        .maybeSingle();
+      // GAMMEL (varroa_submissions - direkte query mot gammel database):
+      // const res = await supabase
+      //   .from("varroa_submissions")
+      //   .select("id,created_at,note,status,images")
+      //   .eq("id", id)
+      //   .maybeSingle();
+      // if (res.error) throw res.error;
+      // if (!res.data) {
+      //   setLoadError("Fant ikke innsendelsen.");
+      //   setItem(null);
+      //   setImages([]);
+      //   return;
+      // }
+      // const loaded = res.data as VarroaSubmission;
+      // setItem(loaded);
 
-      if (res.error) throw res.error;
-      if (!res.data) {
+      // NY: bruker database-utility mot submissions + images
+      const loaded = await fetchSubmissionById(supabase, id);
+      if (!loaded) {
         setLoadError("Fant ikke innsendelsen.");
         setItem(null);
         setImages([]);
         return;
       }
-
-      const loaded = res.data as VarroaSubmission;
       setItem(loaded);
 
-      const imagePaths = Array.isArray(loaded.images) ? loaded.images : [];
+      // GAMMEL (images var text[] direkte på raden):
+      // const imagePaths = Array.isArray(loaded.images) ? loaded.images : [];
+
+      // NY: images er et nøstet array av rader fra images-tabellen
+      const imagePaths = loaded.images.map((img) => img.image_path);
       if (imagePaths.length === 0) {
         setImages([]);
         return;
       }
 
-      const signedRes = await supabase.storage
-        .from("varroa-submissions")
-        .createSignedUrls(imagePaths, 60 * 30);
+      // GAMMEL:
+      // const signedRes = await supabase.storage
+      //   .from("varroa-submissions")
+      //   .createSignedUrls(imagePaths, 60 * 30);
+      // if (signedRes.error) throw signedRes.error;
+      // const signedImages: SignedImage[] = (signedRes.data ?? []).flatMap((x) => {
+      //   if (!x) return [];
+      //   if (typeof x.path !== "string") return [];
+      //   if (typeof x.signedUrl !== "string") return [];
+      //   return [{ path: x.path, url: x.signedUrl }];
+      // });
 
-      if (signedRes.error) throw signedRes.error;
-
-      const signedImages: SignedImage[] = (signedRes.data ?? []).flatMap((x) => {
-        if (!x) return [];
-        if (typeof x.path !== "string") return [];
-        if (typeof x.signedUrl !== "string") return [];
-        return [{ path: x.path, url: x.signedUrl }];
+      // NY:
+      const urlByPath = await getSignedImageUrls(supabase, imagePaths);
+      const signedImages: SignedImage[] = imagePaths.flatMap((p) => {
+        const url = urlByPath.get(p);
+        return url ? [{ path: p, url }] : [];
       });
       setImages(signedImages);
     } catch (e) {
@@ -249,7 +277,8 @@ export function InnsendingPage({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-zinc-100">
-                    {formatDateTime(item.created_at)}
+                    {/* GAMMEL: {formatDateTime(item.created_at)} */}
+                    {formatDateTime(item.submission_date)}
                   </div>
                   <div className="mt-2 text-xs text-zinc-500 break-all">
                     ID: {item.id}
@@ -272,7 +301,8 @@ export function InnsendingPage({
                   Kommentar
                 </div>
                 <div className="mt-2 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-200 whitespace-pre-wrap">
-                  {item.note ?? "—"}
+                  {/* GAMMEL: {item.note ?? "—"} */}
+                  {item.comment ?? "—"}
                 </div>
               </div>
             </div>

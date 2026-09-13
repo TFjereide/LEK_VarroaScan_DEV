@@ -6,11 +6,13 @@ import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+// NYTT: database-utility for ny database (samler queries for submissions/images)
+import { submitVarroaScan } from "@/lib/varroaScanDb";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
-const MAX_IMAGES_PER_SUBMISSION = 6;
+// GAMMEL: const MAX_IMAGES_PER_SUBMISSION = 6; // fjernet - ingen grense på antall bilder (kravspek §9)
 const MAX_FILE_SIZE_MB = 15;
 
 type LocalImage = {
@@ -379,9 +381,13 @@ export default function Home() {
     setError(null);
     if (!files || files.length === 0) return;
 
+    /* GAMMEL: begrenset til MAX_IMAGES_PER_SUBMISSION (6) bilder totalt
     const currentCount = images.length;
     const remaining = Math.max(0, MAX_IMAGES_PER_SUBMISSION - currentCount);
     const picked = Array.from(files).slice(0, remaining);
+    */
+    // NY: ingen grense på antall bilder (kravspek §9: "ingen kunstig grense")
+    const picked = Array.from(files);
 
     const tooLarge = picked.find(
       (f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024,
@@ -445,6 +451,7 @@ export default function Home() {
     let step = "Starter";
     setIsSubmitting(true);
     try {
+      /* GAMMEL (mot varroa_submissions - én tabell i gammel database):
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
       const userId = session?.user?.id ?? null;
@@ -509,6 +516,29 @@ export default function Home() {
         type: submissionType,
         note: noteValue,
         imagesCount: uploadedPaths.length,
+      });
+      */
+
+      // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
+      const noteValue = note.trim() ? note.trim() : null;
+
+      const { submissionId, imagePaths } = await submitVarroaScan(supabase, {
+        files: images.map((img) => img.file),
+        note: noteValue,
+        type: submissionType,
+        source: sourceParam ?? "web",
+        deviceInfo: getDeviceInfo(),
+        appVersion,
+        onProgress: (s) => {
+          step = s;
+        },
+      });
+
+      setLastSubmission({
+        id: submissionId,
+        type: submissionType,
+        note: noteValue,
+        imagesCount: imagePaths.length,
       });
       setDidSubmit(true);
       setImages((prev) => {
@@ -720,7 +750,8 @@ export default function Home() {
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold text-zinc-200">Bilder</div>
                 <div className="text-xs text-zinc-400">
-                  {images.length}/{MAX_IMAGES_PER_SUBMISSION}
+                  {/* GAMMEL: {images.length}/{MAX_IMAGES_PER_SUBMISSION} */}
+                  {images.length} valgt
                 </div>
               </div>
 
@@ -745,24 +776,24 @@ export default function Home() {
                   </div>
                 ))}
 
-                {images.length < MAX_IMAGES_PER_SUBMISSION ? (
-                  <label className="h-40 rounded-2xl border border-dashed border-zinc-700 bg-zinc-950 flex items-center justify-center text-sm font-semibold text-zinc-200 active:opacity-90">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      capture="environment"
-                      className="hidden"
-                      onChange={(e) => onPickImages(e.target.files)}
-                    />
-                    + Legg til
-                  </label>
-                ) : null}
+                {/* GAMMEL: {images.length < MAX_IMAGES_PER_SUBMISSION ? (<label>...</label>) : null}
+                    NY: ingen grense på antall bilder - knappen vises alltid */}
+                <label className="h-40 rounded-2xl border border-dashed border-zinc-700 bg-zinc-950 flex items-center justify-center text-sm font-semibold text-zinc-200 active:opacity-90">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => onPickImages(e.target.files)}
+                  />
+                  + Legg til
+                </label>
               </div>
 
               <div className="mt-2 text-xs text-zinc-500">
-                Maks {MAX_IMAGES_PER_SUBMISSION} bilder per innsending. Maks{" "}
-                {MAX_FILE_SIZE_MB} MB per bilde.
+                {/* GAMMEL: Maks {MAX_IMAGES_PER_SUBMISSION} bilder per innsending. Maks {MAX_FILE_SIZE_MB} MB per bilde. */}
+                Ingen grense på antall bilder. Maks {MAX_FILE_SIZE_MB} MB per bilde.
               </div>
             </div>
 
