@@ -8,7 +8,7 @@ type AfterSubmissionSectionProps = {
     returnUrl : string | null;
     returnLabel : string;
     isOnline : boolean;
-    lastSubmission : utils.Submission;
+    lastSubmission : utils.Submission | null;
     onClick : () => void;
 
 }
@@ -39,27 +39,16 @@ export function AfterSubmissionSection({returnUrl, returnLabel, isOnline, lastSu
             ) : null}
 
             <div className="mt-6 grid grid-cols-1 gap-3">
-              <button
-                type="button"
-                onClick={onClick}
-                className="h-12 rounded-2xl bg-amber-400 text-zinc-950 font-semibold active:opacity-90 disabled:opacity-60"
-              >
-                Send flere
-              </button>
+         
               {returnUrl ? (
                 <a
                   href={returnUrl}
-                  className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
+                  className="h-12 rounded-2xl bg-amber-400 px-4 flex items-center justify-center text-zinc-950 font-semibold active:opacity-90"
                 >
-                  ← {returnLabel}
+                  ← {returnLabel} / send
                 </a>
               ) : null}
-              {/* <a
-                href={`${basePath}/admin/`}
-                className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
-              >
-                🎓 Logg inn i admin
-              </a> */}
+        
             </div>
           </div>
         </main>

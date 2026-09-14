@@ -3,6 +3,14 @@
 export const MAX_FILE_SIZE_MB = 15;
 export const MOBILE_CAMERA_LOOP_RE = /iPhone|iPad|iPod|Android/i;
 
+export type LocalImage = {
+  id: string;
+  file: File;
+  previewUrl: string;
+  note: string;
+  noteOpen: boolean;
+};
+
 export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
 export type Submission = {

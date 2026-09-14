@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+
+// lib
 import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
@@ -15,23 +17,13 @@ import{CommonHeader} from "@/components/header";
 import { TechnicalInfoPanel } from "@/components/technicalInfo";
 import { PhototypeSection } from "@/components/phototypeSection";
 import { SubmissionButtonSection } from "@/components/submissionButtonSection";
-
-
-type LocalImage = {
-  id: string;
-  file: File;
-  previewUrl: string;
-  note: string;
-  noteOpen: boolean;
-};
+import { AfterSubmissionSection } from "@/components/afterSubmissionSection";
 
 
 export default function Home() {
   const pathname = usePathname();
   const isOnline = useOnlineStatus();
 
-  const [showTech, setShowTech] = useState(false);
-  // const [returnMeta, setReturnMeta] = useState(() => utils.getReturnMeta());
   const [returnMeta, setReturnMeta] = useState<{
     url: string | null;
     label: string;
@@ -50,16 +42,12 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   
   const [note, setNote] = useState("");
-  const [images, setImages] = useState<LocalImage[]>([]);
+  const [images, setImages] = useState<utils.LocalImage[]>([]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [didSubmit, setDidSubmit] = useState(false);
   const [lastSubmission, setLastSubmission] = useState< Submission | null>(null);
-  const [submissionType, setSubmissionType] = useState<SubmissionType>(() => {
-    if (typeof window === "undefined") return "BUNNBRETT_FOTO";
-    const params = new URLSearchParams(window.location.search);
-    return utils.normalizeType(params.get("type")) ?? "BUNNBRETT_FOTO";
-  });
+  const [submissionType, setSubmissionType] = useState<SubmissionType>("BUNNBRETT_FOTO");
   
   const [bottomOverlayPx, setBottomOverlayPx] = useState(0);
   const [lastTech, setLastTech] = useState<string | null>(null);
@@ -69,63 +57,93 @@ export default function Home() {
 
   const appVersion = useMemo(() => getAppVersion(), []);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
-  const sourceParam = useMemo(() => {
-    if (typeof window === "undefined") return null;
+  const [sourceParam, setSourceParam] = useState<string | null>(null);
+  const [authRedirectPath, setAuthRedirectPath] = useState<string | null>(null);
+  const [isMagicLinkLanding, setIsMagicLinkLanding] = useState(false);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    return utils.normalizeSource(params.get("source"));
-  }, []);
-  const authRedirectPath = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return utils.normalizeInternalRedirectPath(params.get("authRedirect"));
-  }, []);
-  const isMagicLinkLanding = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return utils.hasMagicLinkHash(window.location.hash);
-  }, []);
-  
 
+    const type = utils.normalizeType(params.get("type"));
+    if (type){
+      setSubmissionType(type);
+    }
 
-  const isFromBiensVokter = useMemo(
-    () => utils.isLikelyFromBiensVokter(returnUrl, sourceParam),
-    [returnUrl, sourceParam],
-  );
+    setSourceParam(
+      utils.normalizeSource(params.get("source"))
+    );
+
+    setAuthRedirectPath(
+      utils.normalizeInternalRedirectPath(params.get("authRedirect"))
+    );
+
+    setIsMagicLinkLanding(
+      utils.hasMagicLinkHash(window.location.hash)
+    );
+  }, []);
+
+  const isFromBiensVokter = () => utils.isLikelyFromBiensVokter(returnUrl, sourceParam);
 
   const canAutoReopenCamera = useMemo(() => {
     if (typeof window === "undefined") return false;
     return utils.MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
   }, []);
 
- 
 
+
+  // AUTH redirection
   useEffect(() => {
+    // Nothing to do unless we've been given a redirect destination.
     if (!authRedirectPath) return;
 
+    // Get the browser-side Supabase client. If it isn't available,
+    // we can't check authentication or subscribe to auth changes.
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
+
+    // These variables belong to this particular invocation of the effect.
+    //
+    // `active` prevents an async callback from doing anything after
+    // the effect has been cleaned up.
+    //
+    // `redirected` prevents multiple auth events from causing multiple
+    // redirects.
     let active = true;
     let redirected = false;
     const target = `${basePath}${authRedirectPath}`;
 
+    // Perform the redirect once we have a logged-in user.
     const redirectIfReady = (session: { user?: unknown } | null) => {
       if (!active || redirected || !session?.user) return;
       redirected = true;
       window.location.replace(target);
     };
 
+    // Check whether we're already authenticated.
+    //
+    // This handles the case where the user was already logged in
+    // when this component mounted.
     void supabase.auth.getSession().then(({ data }) => {
       redirectIfReady(data.session);
     });
 
+    // Also listen for future authentication changes.
+    //
+    // For example, the user might log in after the component has mounted.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       redirectIfReady(session);
     });
 
+
+    // Clean up when the component unmounts or when one of the
+    // dependencies changes.
+    //
+    // Without this, the auth listener would remain subscribed and
+    // could continue trying to redirect after this component is gone.
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -227,7 +245,7 @@ export default function Home() {
       return;
     }
 
-    const next: LocalImage[] = picked.map((file) => ({
+    const next: utils.LocalImage[] = picked.map((file) => ({
       id: crypto.randomUUID(),
       file,
       previewUrl: URL.createObjectURL(file),
@@ -446,63 +464,15 @@ export default function Home() {
 
 
   // A completely different page that shows when something was submitted
-  if (didSubmit) {
-    const sentTypeLabel = lastSubmission?.type === "KONTROLLFOTO" ? "Kontrollfoto" : "Bunnbrett foto";
-
-    return (
-      <div className="flex flex-col min-h-dvh px-4 pb-10 pt-8">
-        
-        <CommonHeader url={returnUrl} label={returnLabel} isOnline={isOnline}></CommonHeader>
-
-        <main className="mx-auto mt-10 w-full max-w-xl">
-          <div className="rounded-3xl bg-zinc-900 border border-zinc-800 p-6">
-            <div className="text-2xl font-semibold">Takk!</div>
-            <div className="mt-2 text-zinc-300">
-              Innsendingen er mottatt. Vil du sende inn flere?
-            </div>
-
-            {lastSubmission ? (
-              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-200">
-                <div>Type: {sentTypeLabel}</div>
-                <div>Antall bilder: {lastSubmission.imagesCount}</div>
-                <div className="mt-2 text-zinc-300">
-                  Kommentar: {lastSubmission.note ? lastSubmission.note : "Ingen"}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="h-12 rounded-2xl bg-amber-400 text-zinc-950 font-semibold active:opacity-90 disabled:opacity-60"
-              >
-                Send flere
-              </button>
-              {returnUrl ? (
-                <a
-                  href={returnUrl}
-                  className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
-                >
-                  ← {returnLabel}
-                </a>
-              ) : null}
-              {/* <a
-                href={`${basePath}/admin/`}
-                className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
-              >
-                🎓 Logg inn i admin
-              </a> */}
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-
-  // Default page to show
   return (
+    didSubmit ? 
+    <AfterSubmissionSection 
+      returnUrl={returnUrl} 
+      returnLabel={returnLabel} 
+      isOnline={isOnline} 
+      lastSubmission={lastSubmission} 
+      onClick={ () => {setDidSubmit(false)}} />
+    :
     <div
       className="flex flex-col min-h-[100svh] px-4 pt-8"
       style={{
@@ -636,15 +606,12 @@ export default function Home() {
               </div>
             ) : null}
 
-            <TechnicalInfoPanel isFromBiensVokter={isFromBiensVokter} sourceParam={sourceParam} lastTech={lastTech}></TechnicalInfoPanel>
-
-            <PhototypeSection submissionType={submissionType} onSubmissionTypeChange={setSubmissionType} />
           </div>
+            <TechnicalInfoPanel isFromBiensVokter={isFromBiensVokter()} sourceParam={sourceParam} lastTech={lastTech}></TechnicalInfoPanel>
+            <PhototypeSection submissionType={submissionType} onSubmissionTypeChange={setSubmissionType} />
         </div>
       </main>
-
       <SubmissionButtonSection isSubmitting={isSubmitting} onSubmit={onSubmit} bottomOverlayPx={bottomOverlayPx} />
-    
     </div>
   );
 }
