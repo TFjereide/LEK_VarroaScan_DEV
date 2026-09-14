@@ -25,32 +25,30 @@ export default function Home() {
   const isOnline = useOnlineStatus();
 
 
+  const [showTech, setShowTech] = useState(false);
   const [returnMeta, setReturnMeta] = useState(() => getReturnMeta());
   const [submissionType, setSubmissionType] = useState<SubmissionType>(() => {
     if (typeof window === "undefined") return "BUNNBRETT_FOTO";
     const params = new URLSearchParams(window.location.search);
     return normalizeType(params.get("type")) ?? "BUNNBRETT_FOTO";
   });
+
   const [note, setNote] = useState("");
   const [images, setImages] = useState<LocalImage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [didSubmit, setDidSubmit] = useState(false);
-  const [lastSubmission, setLastSubmission] = useState<{
-    id: string;
-    type: SubmissionType;
-    note: string | null;
-    imagesCount: number;
-  } | null>(null);
+  const [lastSubmission, setLastSubmission] = useState< Submission | null>(null);
   const [bottomOverlayPx, setBottomOverlayPx] = useState(0);
-  const [showTech, setShowTech] = useState(false);
   const [lastTech, setLastTech] = useState<string | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const cameraLoopTimerRef = useRef<number | null>(null);
 
   const appVersion = useMemo(() => getAppVersion(), []);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
   const sourceParam = useMemo(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
@@ -69,9 +67,10 @@ export default function Home() {
 
 
   const isFromBiensVokter = useMemo(
-    () => isLikelyFromBiensVokter(returnUrl, sourceParam),
-    [returnUrl, sourceParam],
+    () => isLikelyFromBiensVokter(returnMeta.url, sourceParam),
+    [returnMeta.url, sourceParam],
   );
+
   const canAutoReopenCamera = useMemo(() => {
     if (typeof window === "undefined") return false;
     return MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
@@ -423,10 +422,11 @@ export default function Home() {
     }
   };
 
+
+  // A completely different page that shows when something was submitted
   if (didSubmit) {
-    const sentTypeLabel =
-      lastSubmission?.type === "KONTROLLFOTO" ? "Kontrollfoto" : "Bunnbrett foto";
-      
+    const sentTypeLabel = lastSubmission?.type === "KONTROLLFOTO" ? "Kontrollfoto" : "Bunnbrett foto";
+
     return (
       <div className="flex flex-col min-h-dvh px-4 pb-10 pt-8">
         <CommonHeader url={returnMeta.url} label={returnMeta.label}></CommonHeader>
@@ -456,12 +456,12 @@ export default function Home() {
               >
                 Send flere
               </button>
-              {returnUrl ? (
+              {returnMeta.url ? (
                 <a
-                  href={returnUrl}
+                  href={returnMeta.url}
                   className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
                 >
-                  ← {returnLabel}
+                  ← {returnMeta.label}
                 </a>
               ) : null}
               <a
@@ -477,8 +477,10 @@ export default function Home() {
     );
   }
 
+  
+  
+  // Default page to show
   const typeLabel = submissionType === "BUNNBRETT_FOTO" ? "Bunnbrett foto" : "Kontrollfoto";
-
   return (
     <div
       className="flex flex-col min-h-[100svh] px-4 pt-8"
@@ -618,7 +620,7 @@ export default function Home() {
               onClick={() => setShowTech((v) => !v)}
               className="text-left text-xs text-zinc-400 hover:text-zinc-200"
             >
-              {showTech ? "Skjul teknisk info" : "Vis teknisk info"}
+            {showTech ? "Skjul teknisk info" : "Vis teknisk info"}
             </button>
 
             {showTech ? (

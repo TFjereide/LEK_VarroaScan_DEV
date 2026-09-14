@@ -5,6 +5,13 @@ const MOBILE_CAMERA_LOOP_RE = /iPhone|iPad|iPod|Android/i;
 
 type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
+type Submission = {
+    id: string;
+    type: SubmissionType;
+    note: string | null;
+    imagesCount: number;
+};
+
 
 function formatBytes(bytes: number) {
   const kb = bytes / 1024;
