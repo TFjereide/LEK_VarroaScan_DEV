@@ -10,9 +10,11 @@ import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import * as utils from "@/lib/utils";
 import { Submission, SubmissionType } from "@/lib/utils";
 
+// components
 import{CommonHeader} from "@/components/header";
 import { TechnicalInfoPanel } from "@/components/technicalInfo";
 import { PhototypeSection } from "@/components/phototypeSection";
+import { SubmissionButtonSection } from "@/components/submissionButtonSection";
 
 
 type LocalImage = {
@@ -485,12 +487,12 @@ export default function Home() {
                   ← {returnLabel}
                 </a>
               ) : null}
-              <a
+              {/* <a
                 href={`${basePath}/admin/`}
                 className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
               >
                 🎓 Logg inn i admin
-              </a>
+              </a> */}
             </div>
           </div>
         </main>
@@ -641,26 +643,8 @@ export default function Home() {
         </div>
       </main>
 
-      <div
-        className="fixed inset-x-0 z-40 border-t border-zinc-800 bg-zinc-950"
-        style={{
-          bottom: `calc(env(safe-area-inset-bottom) + ${bottomOverlayPx}px)`,
-        }}
-      >
-        <div className="mx-auto w-full max-w-xl px-4 py-3">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={onSubmit}
-            className="h-12 w-full rounded-2xl bg-amber-400 text-zinc-950 font-semibold active:opacity-90 disabled:opacity-60"
-          >
-            {isSubmitting ? "Sender…" : "Send inn"}
-          </button>
-          <div className="mt-2 text-center text-[11px] text-zinc-500">
-            Metadata: tidspunkt, route, device, appversjon.
-          </div>
-        </div>
-      </div>
+      <SubmissionButtonSection isSubmitting={isSubmitting} onSubmit={onSubmit} bottomOverlayPx={bottomOverlayPx} />
+    
     </div>
   );
 }
