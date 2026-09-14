@@ -11,6 +11,8 @@ import * as utils from "@/lib/utils";
 import { Submission, SubmissionType } from "@/lib/utils";
 
 import{CommonHeader} from "@/components/header";
+import { TechnicalInfoPanel } from "@/components/technicalInfo";
+import { PhototypeSection } from "@/components/phototypeSection";
 
 
 type LocalImage = {
@@ -447,6 +449,7 @@ export default function Home() {
 
     return (
       <div className="flex flex-col min-h-dvh px-4 pb-10 pt-8">
+        
         <CommonHeader url={returnUrl} label={returnLabel} isOnline={isOnline}></CommonHeader>
 
         <main className="mx-auto mt-10 w-full max-w-xl">
@@ -495,10 +498,8 @@ export default function Home() {
     );
   }
 
-  
-  
+
   // Default page to show
-  const typeLabel = submissionType === "BUNNBRETT_FOTO" ? "Bunnbrett foto" : "Kontrollfoto";
   return (
     <div
       className="flex flex-col min-h-[100svh] px-4 pt-8"
@@ -633,73 +634,9 @@ export default function Home() {
               </div>
             ) : null}
 
-            <button
-              type="button"
-              onClick={() => setShowTech((v) => !v)}
-              className="text-left text-xs text-zinc-400 hover:text-zinc-200"
-            >
-            {showTech ? "Skjul teknisk info" : "Vis teknisk info"}
-            </button>
+            <TechnicalInfoPanel isFromBiensVokter={isFromBiensVokter} sourceParam={sourceParam} lastTech={lastTech}></TechnicalInfoPanel>
 
-            {showTech ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs text-zinc-300">
-                <div>route: {pathname}</div>
-                <div>appVersion: {appVersion}</div>
-                <div>online: {String(isOnline)}</div>
-                <div>displayModeStandalone: {String(utils.isStandaloneApp())}</div>
-                <div>fromBiensVokter: {String(isFromBiensVokter)}</div>
-                <div>source: {sourceParam ?? "—"}</div>
-                <div>
-                  supabaseUrl:{" "}
-                  {supabaseUrl
-                    ? (() => {
-                        try {
-                          const u = new URL(supabaseUrl);
-                          return u.origin;
-                        } catch {
-                          return supabaseUrl;
-                        }
-                      })()
-                    : "Mangler"}
-                </div>
-                {lastTech ? <div>feil: {lastTech}</div> : null}
-              </div>
-            ) : null}
-
-            <details className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3">
-              <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-300">
-                Type (avansert): {typeLabel}
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSubmissionType("BUNNBRETT_FOTO")}
-                  className={[
-                    "h-11 rounded-2xl border text-sm font-semibold",
-                    submissionType === "BUNNBRETT_FOTO"
-                      ? "border-amber-300 bg-amber-400 text-zinc-950"
-                      : "border-zinc-700 bg-zinc-950 text-zinc-100",
-                  ].join(" ")}
-                >
-                  Bunnbrett foto
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmissionType("KONTROLLFOTO")}
-                  className={[
-                    "h-11 rounded-2xl border text-sm font-semibold",
-                    submissionType === "KONTROLLFOTO"
-                      ? "border-amber-300 bg-amber-400 text-zinc-950"
-                      : "border-zinc-700 bg-zinc-950 text-zinc-100",
-                  ].join(" ")}
-                >
-                  Kontrollfoto
-                </button>
-              </div>
-              <div className="mt-3 text-xs text-zinc-500">
-                Bruk kontrollfoto hvis dere tester/kalibrerer eller vil skille testbilder fra ekte bunnbrett-bilder.
-              </div>
-            </details>
+            <PhototypeSection submissionType={submissionType} onSubmissionTypeChange={setSubmissionType} />
           </div>
         </div>
       </main>
