@@ -7,6 +7,8 @@ import { getDeviceInfo } from "@/lib/deviceInfo";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import * as utils from "@/lib/utils";
+import { Submission, SubmissionType } from "@/lib/utils";
 
 import{CommonHeader} from "@/components/header";
 
@@ -24,56 +26,72 @@ export default function Home() {
   const pathname = usePathname();
   const isOnline = useOnlineStatus();
 
-
   const [showTech, setShowTech] = useState(false);
-  const [returnMeta, setReturnMeta] = useState(() => getReturnMeta());
-  const [submissionType, setSubmissionType] = useState<SubmissionType>(() => {
-    if (typeof window === "undefined") return "BUNNBRETT_FOTO";
-    const params = new URLSearchParams(window.location.search);
-    return normalizeType(params.get("type")) ?? "BUNNBRETT_FOTO";
+  // const [returnMeta, setReturnMeta] = useState(() => utils.getReturnMeta());
+  const [returnMeta, setReturnMeta] = useState<{
+    url: string | null;
+    label: string;
+  }>({
+    url: null,
+    label: "Tilbake",
   });
 
+  useEffect(() => {
+    setReturnMeta(utils.getReturnMeta());
+  }, []);
+
+
+  const {url : returnUrl, label: returnLabel} = returnMeta;
+  
+  const [error, setError] = useState<string | null>(null);
+  
   const [note, setNote] = useState("");
   const [images, setImages] = useState<LocalImage[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [didSubmit, setDidSubmit] = useState(false);
   const [lastSubmission, setLastSubmission] = useState< Submission | null>(null);
+  const [submissionType, setSubmissionType] = useState<SubmissionType>(() => {
+    if (typeof window === "undefined") return "BUNNBRETT_FOTO";
+    const params = new URLSearchParams(window.location.search);
+    return utils.normalizeType(params.get("type")) ?? "BUNNBRETT_FOTO";
+  });
+  
   const [bottomOverlayPx, setBottomOverlayPx] = useState(0);
   const [lastTech, setLastTech] = useState<string | null>(null);
+
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const cameraLoopTimerRef = useRef<number | null>(null);
 
   const appVersion = useMemo(() => getAppVersion(), []);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
   const sourceParam = useMemo(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    return normalizeSource(params.get("source"));
+    return utils.normalizeSource(params.get("source"));
   }, []);
   const authRedirectPath = useMemo(() => {
     if (typeof window === "undefined") return null;
     const params = new URLSearchParams(window.location.search);
-    return normalizeInternalRedirectPath(params.get("authRedirect"));
+    return utils.normalizeInternalRedirectPath(params.get("authRedirect"));
   }, []);
   const isMagicLinkLanding = useMemo(() => {
     if (typeof window === "undefined") return false;
-    return hasMagicLinkHash(window.location.hash);
+    return utils.hasMagicLinkHash(window.location.hash);
   }, []);
   
 
 
   const isFromBiensVokter = useMemo(
-    () => isLikelyFromBiensVokter(returnMeta.url, sourceParam),
-    [returnMeta.url, sourceParam],
+    () => utils.isLikelyFromBiensVokter(returnUrl, sourceParam),
+    [returnUrl, sourceParam],
   );
 
   const canAutoReopenCamera = useMemo(() => {
     if (typeof window === "undefined") return false;
-    return MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
+    return utils.MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
   }, []);
 
  
@@ -196,11 +214,11 @@ export default function Home() {
     const picked = Array.from(files);
 
     const tooLarge = picked.find(
-      (f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024,
+      (f) => f.size > utils.MAX_FILE_SIZE_MB * 1024 * 1024,
     );
     if (tooLarge) {
       setError(
-        `Bildet "${tooLarge.name}" er for stort (${formatBytes(tooLarge.size)}). Maks ${MAX_FILE_SIZE_MB} MB per bilde.`,
+        `Bildet "${tooLarge.name}" er for stort (${utils.formatBytes(tooLarge.size)}). Maks ${utils.MAX_FILE_SIZE_MB} MB per bilde.`,
       );
       return;
     }
@@ -386,7 +404,7 @@ export default function Home() {
       };
 
       let insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
-      if (insertRes.error && isMissingImageNotesColumnError(insertRes.error)) {
+      if (insertRes.error && utils.isMissingImageNotesColumnError(insertRes.error)) {
         delete insertPayload.image_notes;
         insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
       }
@@ -429,7 +447,7 @@ export default function Home() {
 
     return (
       <div className="flex flex-col min-h-dvh px-4 pb-10 pt-8">
-        <CommonHeader url={returnMeta.url} label={returnMeta.label}></CommonHeader>
+        <CommonHeader url={returnUrl} label={returnLabel} isOnline={isOnline}></CommonHeader>
 
         <main className="mx-auto mt-10 w-full max-w-xl">
           <div className="rounded-3xl bg-zinc-900 border border-zinc-800 p-6">
@@ -456,12 +474,12 @@ export default function Home() {
               >
                 Send flere
               </button>
-              {returnMeta.url ? (
+              {returnUrl ? (
                 <a
-                  href={returnMeta.url}
+                  href={returnUrl}
                   className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
                 >
-                  ← {returnMeta.label}
+                  ← {returnLabel}
                 </a>
               ) : null}
               <a
@@ -488,7 +506,7 @@ export default function Home() {
         paddingBottom: `calc(8rem + env(safe-area-inset-bottom) + ${bottomOverlayPx}px)`,
       }}
     >
-      <CommonHeader url={returnMeta.url} label={returnMeta.label}></CommonHeader>
+      <CommonHeader url={returnUrl} label={returnLabel} isOnline={isOnline}></CommonHeader>
 
       <main className="mx-auto mt-6 w-full max-w-xl">
         <div className="rounded-3xl bg-zinc-900 border border-zinc-800 p-5">
@@ -554,7 +572,7 @@ export default function Home() {
                               Bilde {index + 1}
                             </div>
                             <div className="mt-1 text-xs text-zinc-500">
-                              {formatBytes(img.file.size)}
+                              {utils.formatBytes(img.file.size)}
                             </div>
                           </div>
                           <button
@@ -592,7 +610,7 @@ export default function Home() {
               </div>
 
               <div className="mt-2 text-xs text-zinc-500">
-                Ubegrenset antall bilder. Maks {MAX_FILE_SIZE_MB} MB per bilde.
+                Ubegrenset antall bilder. Maks {utils.MAX_FILE_SIZE_MB} MB per bilde.
               </div>
             </div>
 
@@ -628,7 +646,7 @@ export default function Home() {
                 <div>route: {pathname}</div>
                 <div>appVersion: {appVersion}</div>
                 <div>online: {String(isOnline)}</div>
-                <div>displayModeStandalone: {String(isStandaloneApp())}</div>
+                <div>displayModeStandalone: {String(utils.isStandaloneApp())}</div>
                 <div>fromBiensVokter: {String(isFromBiensVokter)}</div>
                 <div>source: {sourceParam ?? "—"}</div>
                 <div>

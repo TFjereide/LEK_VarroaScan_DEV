@@ -1,11 +1,11 @@
 
 
-const MAX_FILE_SIZE_MB = 15;
-const MOBILE_CAMERA_LOOP_RE = /iPhone|iPad|iPod|Android/i;
+export const MAX_FILE_SIZE_MB = 15;
+export const MOBILE_CAMERA_LOOP_RE = /iPhone|iPad|iPod|Android/i;
 
-type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
+export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
-type Submission = {
+export type Submission = {
     id: string;
     type: SubmissionType;
     note: string | null;
@@ -13,14 +13,14 @@ type Submission = {
 };
 
 
-function formatBytes(bytes: number) {
+export function formatBytes(bytes: number) {
   const kb = bytes / 1024;
   const mb = kb / 1024;
   if (mb >= 1) return `${mb.toFixed(1)} MB`;
   return `${kb.toFixed(0)} KB`;
 }
 
-function normalizeErrorMessage(e: unknown) {
+export function normalizeErrorMessage(e: unknown) {
   const raw =
     typeof e === "object" && e && "message" in e
       ? String((e as { message?: unknown }).message)
@@ -46,14 +46,14 @@ function normalizeErrorMessage(e: unknown) {
   return raw;
 }
 
-function isMissingImageNotesColumnError(value: unknown) {
+export function isMissingImageNotesColumnError(value: unknown) {
   if (!value || typeof value !== "object") return false;
   if (!("message" in value)) return false;
   const message = String((value as { message?: unknown }).message ?? "");
   return message.includes("image_notes");
 }
 
-function normalizeSource(value: string | null) {
+export function normalizeSource(value: string | null) {
   const raw = (value ?? "").trim().toLowerCase();
   const v = raw.replace(/\s+/g, "-");
   if (!v) return null;
@@ -70,14 +70,14 @@ function normalizeSource(value: string | null) {
   return v;
 }
 
-function normalizeType(value: string | null): SubmissionType | null {
+export function normalizeType(value: string | null): SubmissionType | null {
   const v = (value ?? "").trim().toLowerCase();
   if (v === "bunnbrett" || v === "bunnbrett_foto") return "BUNNBRETT_FOTO";
   if (v === "kontroll" || v === "kontrollfoto") return "KONTROLLFOTO";
   return null;
 }
 
-function normalizeReturnUrl(value: string | null) {
+export function normalizeReturnUrl(value: string | null) {
   const raw = (value ?? "").trim();
   if (!raw || raw.length > 500) return null;
   try {
@@ -89,7 +89,7 @@ function normalizeReturnUrl(value: string | null) {
   }
 }
 
-function normalizeInternalRedirectPath(value: string | null) {
+export function normalizeInternalRedirectPath(value: string | null) {
   const raw = (value ?? "").trim();
   if (!raw) return null;
   if (!raw.startsWith("/")) return null;
@@ -97,14 +97,14 @@ function normalizeInternalRedirectPath(value: string | null) {
   return raw;
 }
 
-function hasMagicLinkHash(hash: string) {
+export function hasMagicLinkHash(hash: string) {
   const raw = String(hash ?? "").replace(/^#/, "");
   if (!raw) return false;
   const params = new URLSearchParams(raw);
   return Boolean(params.get("access_token") || params.get("refresh_token"));
 }
 
-function getReturnMeta() {
+export function getReturnMeta() {
   if (typeof window === "undefined") {
     return { url: null as string | null, label: "Tilbake" };
   }
@@ -154,7 +154,7 @@ function getReturnMeta() {
   return { url: finalUrl, label };
 }
 
-function isStandaloneApp() {
+export function isStandaloneApp() {
   if (typeof window === "undefined") return false;
   const nav = window.navigator as Navigator & { standalone?: boolean };
   const ua = window.navigator.userAgent ?? "";
@@ -167,7 +167,7 @@ function isStandaloneApp() {
   }
 }
 
-function isLikelyFromBiensVokter(returnUrl: string | null, sourceParam: string | null) {
+export function isLikelyFromBiensVokter(returnUrl: string | null, sourceParam: string | null) {
   if (sourceParam === "biens-vokter") return true;
   if (!returnUrl) return false;
   try {

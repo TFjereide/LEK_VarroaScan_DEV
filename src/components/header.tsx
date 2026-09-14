@@ -5,13 +5,16 @@ import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 
 
-type CommonHeaderProps = {url: string | null; label: string};
+type CommonHeaderProps = {
+  url: string | null;
+  label: string;
+  isOnline: boolean;
+};
 
-export function CommonHeader({url, label} : CommonHeaderProps){
+export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const appVersion = useMemo(() => getAppVersion(), []);
-    const isOnline = useOnlineStatus();
 
     const onBack = () => {
         if (url) return;
@@ -20,6 +23,7 @@ export function CommonHeader({url, label} : CommonHeaderProps){
             return;
         }
     };
+
     return (
     <header className="mx-auto w-full max-w-xl">
         <div className="flex items-center justify-between">
@@ -30,7 +34,7 @@ export function CommonHeader({url, label} : CommonHeaderProps){
             >
               ← {label}
             </a>
-          ) : (
+          ) : 
             <button
               type="button"
               onClick={onBack}
@@ -38,7 +42,7 @@ export function CommonHeader({url, label} : CommonHeaderProps){
             >
               ← Tilbake
             </button>
-          )}
+          }
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-zinc-800 flex items-center justify-center">
               <span className="text-sm font-semibold">VS</span>
