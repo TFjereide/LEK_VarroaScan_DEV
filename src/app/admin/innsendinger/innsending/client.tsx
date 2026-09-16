@@ -255,6 +255,12 @@ function ZoomableAnnotatedImage({
     moved: boolean;
   } | null>(null);
   const drawKeysPressed = useRef({ shift: false });
+  const clickCandidate = useRef<
+    | { type: "box"; id: string; t: number; x: number; y: number; moved: boolean }
+    | { type: "draw"; t: number; x: number; y: number; moved: boolean }
+    | null
+  >(null);
+  const [hoveredBoxId, setHoveredBoxId] = useState<string | null>(null);
 
   // Track SHIFT held on window for "force pan during MARK mode".
   useEffect(() => {
@@ -315,6 +321,18 @@ function ZoomableAnnotatedImage({
       x: imgRelX / Math.max(1, r.imgWidth),
       y: imgRelY / Math.max(1, r.imgHeight),
     };
+  };
+
+  const boxHitTest = (clientX: number, clientY: number): { hit: boolean; id: string | null } => {
+    const norm = clientToNormalized(clientX, clientY);
+    if (!norm) return { hit: false, id: null };
+    for (let i = boxes.length - 1; i >= 0; i -= 1) {
+      const b = boxes[i];
+      if (norm.x >= b.x && norm.x <= b.x + b.w && norm.y >= b.y && norm.y <= b.y + b.h) {
+        return { hit: true, id: b.id };
+      }
+    }
+    return { hit: false, id: null };
   };
 
   const clampTxTy = (
@@ -418,6 +436,7 @@ function ZoomableAnnotatedImage({
         startTy: cur.ty,
       };
       dragState.current = null;
+      clickCandidate.current = null;
       setDrawing(null);
       return;
     }
@@ -432,6 +451,7 @@ function ZoomableAnnotatedImage({
     if (wantPan) {
       startPanFromPointer(e.clientX, e.clientY);
       pinchState.current = null;
+      clickCandidate.current = null;
       setDrawing(null);
       return;
     }
@@ -439,9 +459,34 @@ function ZoomableAnnotatedImage({
     const norm = clientToNormalized(e.clientX, e.clientY);
     if (!norm) {
       startPanFromPointer(e.clientX, e.clientY);
+      clickCandidate.current = null;
       setDrawing(null);
       return;
     }
+
+    const hit = boxHitTest(e.clientX, e.clientY);
+    if (hit.hit && hit.id) {
+      clickCandidate.current = {
+        type: "box",
+        id: hit.id,
+        t: performance.now(),
+        x: e.clientX,
+        y: e.clientY,
+        moved: false,
+      };
+      dragState.current = null;
+      pinchState.current = null;
+      setDrawing(null);
+      return;
+    }
+
+    clickCandidate.current = {
+      type: "draw",
+      t: performance.now(),
+      x: e.clientX,
+      y: e.clientY,
+      moved: false,
+    };
     dragState.current = null;
     pinchState.current = null;
     setDrawing({
@@ -482,7 +527,19 @@ function ZoomableAnnotatedImage({
         viewRef.current.scale = nextScale;
         setScale(nextScale);
       }
+      if (clickCandidate.current) clickCandidate.current.moved = true;
       return;
+    }
+
+    if (clickCandidate.current && !clickCandidate.current.moved) {
+      const dx = e.clientX - clickCandidate.current.x;
+      const dy = e.clientY - clickCandidate.current.y;
+      if (Math.hypot(dx, dy) > 4) {
+        clickCandidate.current.moved = true;
+        if (clickCandidate.current.type === "box") {
+          startPanFromPointer(e.clientX, e.clientY);
+        }
+      }
     }
 
     if (drawing && pointers.current.size === 1 && pinchState.current == null) {
@@ -503,14 +560,29 @@ function ZoomableAnnotatedImage({
     }
   };
 
-  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+  const finalizePointerEnd = (
+    e: PointerEvent<HTMLDivElement>,
+    commitDraw: boolean,
+  ) => {
     const target = e.currentTarget;
     try { target.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
     pointers.current.delete(e.pointerId);
 
     if (pointers.current.size < 2) pinchState.current = null;
 
-    if (drawing && pointers.current.size === 0) {
+    if (commitDraw && clickCandidate.current && !clickCandidate.current.moved) {
+      const cand = clickCandidate.current;
+      clickCandidate.current = null;
+      if (cand.type === "box") {
+        onBoxesChange(boxes.filter((b) => b.id !== cand.id));
+        setDrawing(null);
+        dragState.current = null;
+        return;
+      }
+    }
+    clickCandidate.current = null;
+
+    if (commitDraw && drawing && pointers.current.size === 0) {
       const b = drawing;
       setDrawing(null);
       const x = Math.min(b.startX, b.endX);
@@ -529,10 +601,23 @@ function ZoomableAnnotatedImage({
         };
         onBoxesChange([...boxes, next]);
       }
+      dragState.current = null;
       return;
     }
 
+    if (!commitDraw) {
+      setDrawing(null);
+    }
+
     if (pointers.current.size === 0) dragState.current = null;
+  };
+
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    finalizePointerEnd(e, true);
+  };
+
+  const onPointerCancel = (e: PointerEvent<HTMLDivElement>) => {
+    finalizePointerEnd(e, false);
   };
 
   const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -660,7 +745,7 @@ function ZoomableAnnotatedImage({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
+        onPointerCancel={onPointerCancel}
         onDoubleClick={onDoubleClick}
         className={[
           "relative overflow-hidden rounded-3xl bg-zinc-950",
@@ -685,10 +770,10 @@ function ZoomableAnnotatedImage({
             className="h-auto max-h-full w-auto max-w-full object-contain select-none"
           />
 
-          {boxes.map((b, i) => {
+          {boxes.map((b) => {
             const px = normalizedToCssPx(b);
             if (!px) return null;
-            const order = i + 1;
+            const hovered = hoveredBoxId === b.id;
             return (
               <div
                 key={b.id}
@@ -699,29 +784,38 @@ function ZoomableAnnotatedImage({
                   width: px.width,
                   height: px.height,
                 }}
+                onPointerEnter={() => setHoveredBoxId(b.id)}
+                onPointerLeave={() =>
+                  setHoveredBoxId((prev) => (prev === b.id ? null : prev))
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!disabled) onBoxesChange(boxes.filter((x) => x.id !== b.id));
+                }}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                }}
               >
                 <div
-                  className="absolute inset-0 border-[2.5px] border-amber-400 bg-amber-400/10"
-                  style={{ boxShadow: "0 0 0 1px rgba(0,0,0,0.6) inset" }}
+                  className={[
+                    "absolute inset-0 transition",
+                    hovered && !disabled
+                      ? "border-[3px] border-red-500 bg-red-500/15"
+                      : "border-[2.5px] border-amber-400 bg-amber-400/10",
+                  ].join(" ")}
+                  style={
+                    hovered && !disabled
+                      ? {
+                          boxShadow:
+                            "0 0 0 1px rgba(0,0,0,0.6) inset, 0 0 18px 1px rgba(239,68,68,0.55)",
+                          cursor: "pointer",
+                        }
+                      : {
+                          boxShadow: "0 0 0 1px rgba(0,0,0,0.6) inset",
+                          cursor: disabled ? "default" : "pointer",
+                        }
+                  }
                 />
-                <div className="absolute -top-4 left-0 inline-flex items-center gap-1">
-                  <span className="rounded-md bg-amber-400 px-1.5 py-0.5 text-[11px] font-black leading-none text-zinc-950 shadow">
-                    {order}
-                  </span>
-                  {!disabled ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteBox(b.id);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      className="rounded-md bg-red-600 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white shadow hover:bg-red-700"
-                    >
-                      ✕
-                    </button>
-                  ) : null}
-                </div>
               </div>
             );
           })}
@@ -791,8 +885,9 @@ function ZoomableAnnotatedImage({
       </div>
 
       <div className="mt-2 text-center text-[11px] text-zinc-500">
-        ✏️ Markér-modus: trykk og dra rundt EN midd for å lage en firkant. Hold SHIFT for å
-        panorere mens du merker. Mobil: knip to fingre for å zoome, dra med én finger for å tegne.
+        ✏️ Markér-modus: trykk og dra rundt EN midd for å lage en firkant. Klikk på en
+        firkant for å fjerne den. Hold SHIFT for å panorere mens du merker. Mobil: knip to
+        fingre for å zoome, dra med én finger for å tegne.
       </div>
     </div>
   );
