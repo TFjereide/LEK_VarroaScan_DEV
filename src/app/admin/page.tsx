@@ -930,7 +930,7 @@ export default function AdminInboxPage() {
                 <input
                   name="email"
                   autoComplete="email"
-                  autocapitalize="none"
+                  autoCapitalize="none"
                   autoCorrect="off"
                   spellCheck={false}
                   value={email}
