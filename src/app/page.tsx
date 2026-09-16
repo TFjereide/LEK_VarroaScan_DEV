@@ -8,6 +8,8 @@ import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+// NYTT: database-utility for ny database (samler queries for submissions/images)
+import { submitVarroaScan } from "@/lib/varroaScanDb";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import * as utils from "@/lib/utils";
 import { Submission, SubmissionType } from "@/lib/utils";
@@ -319,20 +321,9 @@ export default function Home() {
     let step = "Starter";
     setIsSubmitting(true);
     try {
-      // Opprydder eventuelle ødelagte/utløpte sesjoner for å unngå "Authorization: Bearer <utløpt>" → 401
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const session = sessionData.session;
-        if (session?.user && (!session.expires_at || session.expires_at * 1000 < Date.now() + 60_000)) {
-          await supabase.auth.signOut({ scope: "local" });
-        }
-      } catch {
-        try { await supabase.auth.signOut({ scope: "local" }); } catch {}
-      }
-
-      // Hent SESSION PÅ NYTT (nå er den enten gyldig eller null)
-      const { data: sessionData2 } = await supabase.auth.getSession();
-      const session = sessionData2.session;
+      /* GAMMEL (mot varroa_submissions - én tabell i gammel database):
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
       const userId = session?.user?.id ?? null;
       const userName =
         (session?.user?.user_metadata?.name as string | undefined) ?? null;
@@ -446,6 +437,29 @@ export default function Home() {
         type: submissionType,
         note: noteValue,
         imagesCount: uploadedPaths.length,
+      });
+      */
+
+      // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
+      const noteValue = note.trim() ? note.trim() : null;
+
+      const { submissionId, imagePaths } = await submitVarroaScan(supabase, {
+        files: images.map((img) => img.file),
+        note: noteValue,
+        type: submissionType,
+        source: sourceParam ?? "web",
+        deviceInfo: getDeviceInfo(),
+        appVersion,
+        onProgress: (s) => {
+          step = s;
+        },
+      });
+
+      setLastSubmission({
+        id: submissionId,
+        type: submissionType,
+        note: noteValue,
+        imagesCount: imagePaths.length,
       });
       setDidSubmit(true);
       setImages((prev) => {
@@ -580,6 +594,20 @@ export default function Home() {
                     ) : null}
                   </div>
                 ))}
+
+                {/* GAMMEL: {images.length < MAX_IMAGES_PER_SUBMISSION ? (<label>...</label>) : null}
+                    NY: ingen grense på antall bilder - knappen vises alltid */}
+                <label className="h-40 rounded-2xl border border-dashed border-zinc-700 bg-zinc-950 flex items-center justify-center text-sm font-semibold text-zinc-200 active:opacity-90">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => onPickImages(e.target.files)}
+                  />
+                  + Legg til
+                </label>
               </div>
 
               <div className="mt-2 text-xs text-zinc-500">
