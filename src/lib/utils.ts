@@ -13,7 +13,7 @@ export type LocalImage = {
 
 export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
-export type Submission = {
+export type SubmissionInfo = {
     id: string;
     type: SubmissionType;
     note: string | null;
