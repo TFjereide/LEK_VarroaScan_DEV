@@ -2,280 +2,150 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+
+// lib
 import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
 import { isVarroaAdmin } from "@/lib/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+// NYTT: database-utility for ny database (samler queries for submissions/images)
+import { submitVarroaScan } from "@/lib/varroaScanDb";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import * as utils from "@/lib/utils";
+import { SubmissionInfo, SubmissionType } from "@/lib/utils";
 
-type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
+// components
+import { CommonHeader } from "@/components/header";
+import { TechnicalInfoPanel } from "@/components/technicalInfo";
+import { PhototypeSection } from "@/components/phototypeSection";
+import { SubmissionButtonSection } from "@/components/submissionButtonSection";
+import { AfterSubmissionSection } from "@/components/afterSubmissionSection";
 
-const MAX_FILE_SIZE_MB = 15;
-const MOBILE_CAMERA_LOOP_RE = /iPhone|iPad|iPod|Android/i;
-
-type LocalImage = {
-  id: string;
-  file: File;
-  previewUrl: string;
-  note: string;
-  noteOpen: boolean;
-};
-
-function formatBytes(bytes: number) {
-  const kb = bytes / 1024;
-  const mb = kb / 1024;
-  if (mb >= 1) return `${mb.toFixed(1)} MB`;
-  return `${kb.toFixed(0)} KB`;
-}
-
-function normalizeErrorMessage(e: unknown) {
-  const raw =
-    typeof e === "object" && e && "message" in e
-      ? String((e as { message?: unknown }).message)
-      : "Ukjent feil";
-
-  const lower = raw.toLowerCase();
-  if (
-    lower.includes("row-level security") ||
-    lower.includes("violates row-level security") ||
-    lower.includes("rls")
-  ) {
-    return `RLS blokkerer innsetting i Supabase. Sjekk at du kjører SQL i samme Supabase-prosjekt som appen peker mot (se supabaseUrl i teknisk info). Kjør både policy-setup og GRANT (schema/table privileges) i dette prosjektet. (${raw})`;
-  }
-
-  if (
-    e instanceof TypeError ||
-    lower.includes("load failed") ||
-    lower.includes("failed to fetch")
-  ) {
-    return `Nettverksfeil mot backend. Sjekk Vercel env (NEXT_PUBLIC_SUPABASE_URL/NEXT_PUBLIC_SUPABASE_ANON_KEY) og at Supabase-migrasjonen er kjørt (bucket/policies). (${raw})`;
-  }
-
-  return raw;
-}
-
-function isMissingImageNotesColumnError(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  if (!("message" in value)) return false;
-  const message = String((value as { message?: unknown }).message ?? "");
-  return message.includes("image_notes");
-}
-
-function normalizeSource(value: string | null) {
-  const raw = (value ?? "").trim().toLowerCase();
-  const v = raw.replace(/\s+/g, "-");
-  if (!v) return null;
-  if (!/^[a-z0-9_-]{1,32}$/.test(v)) return null;
-  if (
-    v === "biens-vokter" ||
-    v === "biens_vokter" ||
-    v === "lek-biens-vokter" ||
-    v === "lek_biens_vokter" ||
-    v === "bv"
-  ) {
-    return "biens-vokter";
-  }
-  return v;
-}
-
-function normalizeType(value: string | null): SubmissionType | null {
-  const v = (value ?? "").trim().toLowerCase();
-  if (v === "bunnbrett" || v === "bunnbrett_foto") return "BUNNBRETT_FOTO";
-  if (v === "kontroll" || v === "kontrollfoto") return "KONTROLLFOTO";
-  return null;
-}
-
-function normalizeReturnUrl(value: string | null) {
-  const raw = (value ?? "").trim();
-  if (!raw || raw.length > 500) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
-function normalizeInternalRedirectPath(value: string | null) {
-  const raw = (value ?? "").trim();
-  if (!raw) return null;
-  if (!raw.startsWith("/")) return null;
-  if (raw.startsWith("//")) return null;
-  return raw;
-}
-
-function hasMagicLinkHash(hash: string) {
-  const raw = String(hash ?? "").replace(/^#/, "");
-  if (!raw) return false;
-  const params = new URLSearchParams(raw);
-  return Boolean(params.get("access_token") || params.get("refresh_token"));
-}
-
-function getReturnMeta() {
-  if (typeof window === "undefined") {
-    return { url: null as string | null, label: "Tilbake" };
-  }
-
-  const storageUrlKey = "lek_varroascan_return_url";
-  const storageSourceKey = "lek_varroascan_return_source";
-  const params = new URLSearchParams(window.location.search);
-
-  const sourceFromQuery = normalizeSource(params.get("source"));
-
-  const keys = ["returnTo", "return_to", "backTo", "back_to", "return", "back"];
-  for (const key of keys) {
-    const fromParam = normalizeReturnUrl(params.get(key));
-    if (!fromParam) continue;
-    try {
-      localStorage.setItem(storageUrlKey, fromParam);
-      if (sourceFromQuery) localStorage.setItem(storageSourceKey, sourceFromQuery);
-    } catch {}
-    return {
-      url: fromParam,
-      label:
-        sourceFromQuery === "biens-vokter"
-          ? "Tilbake til LEK-Biens Vokter"
-          : "Tilbake",
-    };
-  }
-
-  let urlFromStorage: string | null = null;
-  let sourceFromStorage: string | null = null;
-  try {
-    urlFromStorage = normalizeReturnUrl(localStorage.getItem(storageUrlKey));
-    sourceFromStorage = normalizeSource(localStorage.getItem(storageSourceKey));
-  } catch {}
-
-  const envDefault =
-    process.env.NEXT_PUBLIC_RETURN_URL ??
-    process.env.NEXT_PUBLIC_BIENS_VOKTER_RETURN_URL ??
-    "";
-  const urlFromEnv = normalizeReturnUrl(envDefault);
-  const urlFromReferrer = normalizeReturnUrl(document.referrer);
-
-  const finalUrl = urlFromStorage ?? urlFromEnv ?? urlFromReferrer;
-  const finalSource = sourceFromQuery ?? sourceFromStorage;
-  const label =
-    finalSource === "biens-vokter" ? "Tilbake til LEK-Biens Vokter" : "Tilbake";
-
-  return { url: finalUrl, label };
-}
-
-function isStandaloneApp() {
-  if (typeof window === "undefined") return false;
-  const nav = window.navigator as Navigator & { standalone?: boolean };
-  const ua = window.navigator.userAgent ?? "";
-  const isIos = /iPad|iPhone|iPod/.test(ua);
-  if (isIos) return Boolean(nav.standalone);
-  try {
-    return window.matchMedia("(display-mode: standalone)").matches;
-  } catch {
-    return false;
-  }
-}
-
-function isLikelyFromBiensVokter(returnUrl: string | null, sourceParam: string | null) {
-  if (sourceParam === "biens-vokter") return true;
-  if (!returnUrl) return false;
-  try {
-    const u = new URL(returnUrl);
-    const h = u.hostname.toLowerCase();
-    return h === "lekbie.no" || h.endsWith(".lekbie.no");
-  } catch {
-    return false;
-  }
-}
 
 export default function Home() {
   const pathname = usePathname();
   const isOnline = useOnlineStatus();
 
-  const [submissionType, setSubmissionType] = useState<SubmissionType>(() => {
-    if (typeof window === "undefined") return "BUNNBRETT_FOTO";
-    const params = new URLSearchParams(window.location.search);
-    return normalizeType(params.get("type")) ?? "BUNNBRETT_FOTO";
+  const [returnMeta, setReturnMeta] = useState<{
+    url: string | null;
+    label: string;
+  }>({
+    url: null,
+    label: "Tilbake",
   });
-  const [note, setNote] = useState("");
-  const [images, setImages] = useState<LocalImage[]>([]);
+
+  useEffect(() => {
+    setReturnMeta(utils.getReturnMeta());
+  }, []);
+
+
+  const {url : returnUrl, label: returnLabel} = returnMeta;
+  
   const [error, setError] = useState<string | null>(null);
+  
+  const [note, setNote] = useState("");
+  const [images, setImages] = useState<utils.LocalImage[]>([]);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [didSubmit, setDidSubmit] = useState(false);
-  const [lastSubmission, setLastSubmission] = useState<{
-    id: string;
-    type: SubmissionType;
-    note: string | null;
-    imagesCount: number;
-  } | null>(null);
+  const [lastSubmissionInfo, setLastSubmissionInfo] = useState< SubmissionInfo | null>(null);
+  const [submissionType, setSubmissionType] = useState<SubmissionType>("BUNNBRETT_FOTO");
+  
   const [bottomOverlayPx, setBottomOverlayPx] = useState(0);
-  const [showTech, setShowTech] = useState(false);
   const [lastTech, setLastTech] = useState<string | null>(null);
+
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const cameraLoopTimerRef = useRef<number | null>(null);
 
   const appVersion = useMemo(() => getAppVersion(), []);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const sourceParam = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return normalizeSource(params.get("source"));
-  }, []);
-  const authRedirectPath = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    const params = new URLSearchParams(window.location.search);
-    return normalizeInternalRedirectPath(params.get("authRedirect"));
-  }, []);
-  const isMagicLinkLanding = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return hasMagicLinkHash(window.location.hash);
-  }, []);
-  const [returnMeta, setReturnMeta] = useState(() => getReturnMeta());
-  const returnUrl = returnMeta.url;
-  const returnLabel = returnMeta.label;
-  const isFromBiensVokter = useMemo(
-    () => isLikelyFromBiensVokter(returnUrl, sourceParam),
-    [returnUrl, sourceParam],
-  );
-  const canAutoReopenCamera = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
-  }, []);
 
-  const onBack = () => {
-    if (returnMeta.url) return;
-    if (window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-  };
+  const [sourceParam, setSourceParam] = useState<string | null>(null);
+  const [authRedirectPath, setAuthRedirectPath] = useState<string | null>(null);
+  const [isMagicLinkLanding, setIsMagicLinkLanding] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    const type = utils.normalizeType(params.get("type"));
+    if (type){
+      setSubmissionType(type);
+    }
+
+    setSourceParam(
+      utils.normalizeSource(params.get("source"))
+    );
+
+    setAuthRedirectPath(
+      utils.normalizeInternalRedirectPath(params.get("authRedirect"))
+    );
+
+    setIsMagicLinkLanding(
+      utils.hasMagicLinkHash(window.location.hash)
+    );
+  }, []);
+
+  const isFromBiensVokter = () => utils.isLikelyFromBiensVokter(returnUrl, sourceParam);
+
+  const canAutoReopenCamera = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return utils.MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
+  }, []);
+
+
+
+  // AUTH redirection
+  useEffect(() => {
+    // Nothing to do unless we've been given a redirect destination.
     if (!authRedirectPath) return;
 
+    // Get the browser-side Supabase client. If it isn't available,
+    // we can't check authentication or subscribe to auth changes.
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
+
+    // These variables belong to this particular invocation of the effect.
+    //
+    // `active` prevents an async callback from doing anything after
+    // the effect has been cleaned up.
+    //
+    // `redirected` prevents multiple auth events from causing multiple
+    // redirects.
     let active = true;
     let redirected = false;
     const target = `${basePath}${authRedirectPath}`;
 
+    // Perform the redirect once we have a logged-in user.
     const redirectIfReady = (session: { user?: unknown } | null) => {
       if (!active || redirected || !session?.user) return;
       redirected = true;
       window.location.replace(target);
     };
 
+    // Check whether we're already authenticated.
+    //
+    // This handles the case where the user was already logged in
+    // when this component mounted.
     void supabase.auth.getSession().then(({ data }) => {
       redirectIfReady(data.session);
     });
 
+    // Also listen for future authentication changes.
+    //
+    // For example, the user might log in after the component has mounted.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       redirectIfReady(session);
     });
 
+
+    // Clean up when the component unmounts or when one of the
+    // dependencies changes.
+    //
+    // Without this, the auth listener would remain subscribed and
+    // could continue trying to redirect after this component is gone.
     return () => {
       active = false;
       subscription.unsubscribe();
@@ -368,16 +238,16 @@ export default function Home() {
     const picked = Array.from(files);
 
     const tooLarge = picked.find(
-      (f) => f.size > MAX_FILE_SIZE_MB * 1024 * 1024,
+      (f) => f.size > utils.MAX_FILE_SIZE_MB * 1024 * 1024,
     );
     if (tooLarge) {
       setError(
-        `Bildet "${tooLarge.name}" er for stort (${formatBytes(tooLarge.size)}). Maks ${MAX_FILE_SIZE_MB} MB per bilde.`,
+        `Bildet "${tooLarge.name}" er for stort (${utils.formatBytes(tooLarge.size)}). Maks ${utils.MAX_FILE_SIZE_MB} MB per bilde.`,
       );
       return;
     }
 
-    const next: LocalImage[] = picked.map((file) => ({
+    const next: utils.LocalImage[] = picked.map((file) => ({
       id: crypto.randomUUID(),
       file,
       previewUrl: URL.createObjectURL(file),
@@ -419,7 +289,7 @@ export default function Home() {
     setError(null);
     setIsSubmitting(false);
     setDidSubmit(false);
-    setLastSubmission(null);
+    setLastSubmissionInfo(null);
     setImages((prev) => {
       for (const img of prev) URL.revokeObjectURL(img.previewUrl);
       return [];
@@ -441,143 +311,37 @@ export default function Home() {
     }
 
     const supabase = getSupabaseClient();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-    if (!supabase || !supabaseUrl || !anonKey) {
-      setError("Appen mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY).");
+    // const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
+    // const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+    // if (!supabase || !supabaseUrl || !anonKey) {
+    if (!supabase) {
+      setError("Appen mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_URL).");
       return;
     }
 
     let step = "Starter";
     setIsSubmitting(true);
     try {
-      // Opprydder eventuelle ødelagte/utløpte sesjoner for å unngå "Authorization: Bearer <utløpt>" → 401
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const session = sessionData.session;
-        if (session?.user && (!session.expires_at || session.expires_at * 1000 < Date.now() + 60_000)) {
-          await supabase.auth.signOut({ scope: "local" });
-        }
-      } catch {
-        try { await supabase.auth.signOut({ scope: "local" }); } catch {}
-      }
-
-      // Hent SESSION PÅ NYTT (nå er den enten gyldig eller null)
-      const { data: sessionData2 } = await supabase.auth.getSession();
-      const session = sessionData2.session;
-      const userId = session?.user?.id ?? null;
-      const userName =
-        (session?.user?.user_metadata?.name as string | undefined) ?? null;
-      const jwtMaybe = (session?.access_token as string | undefined) ?? null;
-
+      // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
       const noteValue = note.trim() ? note.trim() : null;
 
-      const submissionId = crypto.randomUUID();
-      const uploadedPaths: string[] = [];
-
-      for (const [index, img] of images.entries()) {
-        step = `Laster opp bilde ${index + 1}/${images.length}`;
-        const ext = img.file.name.split(".").pop()?.toLowerCase();
-        const safeExt = ext && ext.length <= 10 ? ext : "jpg";
-        const filename = crypto.randomUUID() + "." + safeExt;
-        const objectPath = `submissions/${submissionId}/${filename}`;
-
-        // 🎯 Vi bruker DIREKTE fetch for å laste opp → slipper alt av supabase-js bugs
-        //    Vi tar OGSÅ AUTH tokenet med bare hvis det finnes (ANON sender kun API key)
-        const url = `${supabaseUrl}/storage/v1/object/varroa-submissions/${encodeURIComponent(objectPath)}`;
-        const headers: Record<string, string> = {
-          "apikey": anonKey,
-          "Authorization": `Bearer ${jwtMaybe ?? anonKey}`,
-          "cache-control": "max-age=3600",
-          "x-upsert": "false",
-        };
-        if (img.file.type) headers["content-type"] = img.file.type;
-
-        let response: Response;
-        try {
-          response = await fetch(url, { method: "POST", headers, body: img.file });
-        } catch (fetchErr) {
-          // Nettverksfeil (typisk CORS) — viser tydelig hva det er!
-          const msg =
-            fetchErr instanceof TypeError &&
-            (fetchErr.message.toLowerCase().includes("failed") || fetchErr.message === "Failed to fetch")
-              ? `CORS FEIL: Appens domene er IKKE lagt til i Supabase → Project Settings → API → CORS Origins. Legg til https://lek-varroa-scan.vercel.app (og https://*.vercel.app), lagre, prøv igjen. (${fetchErr.message})`
-              : `Nettverksfeil ved bildeopplasting: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
-          throw new Error(msg);
-        }
-
-        let body: unknown = null;
-        try { body = await response.json(); } catch {}
-        if (!response.ok) {
-          const firstLine =
-            typeof body === "object" && body && "message" in body
-              ? String((body as { message: unknown }).message ?? "")
-              : "";
-          const status = response.status;
-          let friendly = `HTTP ${status} ved opplasting av bilde.`;
-          if (status === 400) friendly += ` 400 = Feil request, sjekk CORS/headers. ${firstLine}`;
-          else if (status === 401) friendly += ` 401 = Uautorisert (feil API-key/sesjon). ${firstLine}`;
-          else if (status === 403) friendly += ` 403 = NEKTE (Storage RLS Policy / bucket-tilgang — KJØR DEN STØRRE SQLen du fikk! ${firstLine}`;
-          else if (status === 404) friendly += ` 404 = Bucket finnes IKKE (kjør SQL INSERT for bucket). ${firstLine}`;
-          else if (status === 413) friendly += ` 413 = BILDE FOR STORT (over 15MB bucket limit). ${firstLine}`;
-          else if (status === 415) friendly += ` 415 = Feil filtype (ikke tillatt i bucket allowed_mime_types). ${firstLine}`;
-          else friendly += ` Feilmelding fra backend: ${firstLine}`;
-          throw new Error(friendly);
-        }
-
-        uploadedPaths.push(objectPath);
-      }
-
-      const firstImagePath = uploadedPaths[0] ?? null;
-      const imageUrl =
-        firstImagePath
-          ? `${supabaseUrl}/storage/v1/object/authenticated/varroa-submissions/${firstImagePath}`
-          : null;
-
-      step = "Oppretter innsending";
-      const insertPayload: Record<string, unknown> = {
-        id: submissionId,
-        image_url: imageUrl,
-        beekeeper_name: userName,
-        apiary_name: null,
-        comment: noteValue,
-        mite_count_manual: null,
-        reviewed_by: null,
-        review_status: "pending",
-        user_id: userId,
-        user_name: userName,
-        type: submissionType,
-        images: uploadedPaths,
-        image_notes: images.map((img) => (img.note.trim() ? img.note.trim() : null)),
+      const { submissionId, imagePaths } = await submitVarroaScan(supabase, {
+        files: images.map((img) => img.file),
         note: noteValue,
+        type: submissionType,
         source: sourceParam ?? "web",
-        app_version: appVersion,
-        device_info: getDeviceInfo(),
-        route: pathname,
-        status: "NY",
-      };
+        deviceInfo: getDeviceInfo(),
+        appVersion,
+        onProgress: (s) => {
+          step = s;
+        },
+      });
 
-      let insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
-      if (insertRes.error && isMissingImageNotesColumnError(insertRes.error)) {
-        delete insertPayload.image_notes;
-        insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
-      }
-      if (insertRes.error) {
-        const rawMsg = insertRes.error.message ?? "";
-        const code = insertRes.error.code ?? "";
-        if (insertRes.error.code === "42501" || rawMsg.toLowerCase().includes("row-level") || rawMsg.includes("policy")) {
-          throw new Error(
-            `RLS policy blokkerer INSERT i varroa_submissions. Kjør SQL for varroa_submissions_insert_anyone (sendt tidligere i dag). Details: ${code} ${rawMsg}`,
-          );
-        }
-        throw new Error(`DB insert feilet: ${code} ${rawMsg}`);
-      }
-
-      setLastSubmission({
+      setLastSubmissionInfo({
         id: submissionId,
         type: submissionType,
         note: noteValue,
-        imagesCount: uploadedPaths.length,
+        imagesCount: imagePaths.length,
       });
       setDidSubmit(true);
       setImages((prev) => {
@@ -586,7 +350,8 @@ export default function Home() {
       });
       setNote("");
     } catch (e) {
-      const raw = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : utils.normalizeErrorMessage(e);
+      // const raw = e instanceof Error ? e.message : String(e);
       setLastTech(`${step}: ${raw}`);
       setError(`Kunne ikke sende inn (${step}): ${raw}`);
     } finally {
@@ -594,142 +359,24 @@ export default function Home() {
     }
   };
 
-  if (didSubmit) {
-    const sentTypeLabel =
-      lastSubmission?.type === "KONTROLLFOTO" ? "Kontrollfoto" : "Bunnbrett foto";
-    return (
-      <div className="flex flex-col min-h-dvh px-4 pb-10 pt-8">
-        <header className="mx-auto w-full max-w-xl">
-          <div className="flex items-center justify-between">
-            {returnUrl ? (
-              <a
-                href={returnUrl}
-                className="text-sm font-semibold text-zinc-200 hover:text-zinc-50"
-              >
-                ← {returnLabel}
-              </a>
-            ) : (
-              <button
-                type="button"
-                onClick={onBack}
-                className="text-sm font-semibold text-zinc-200 hover:text-zinc-50"
-              >
-                ← Tilbake
-              </button>
-            )}
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-zinc-800 flex items-center justify-center">
-                <span className="text-sm font-semibold">VS</span>
-              </div>
-              <div>
-                <div className="text-lg font-semibold leading-6">
-                  LEK-VarroaScan
-                </div>
-                <div className="text-xs text-zinc-400">v{appVersion}</div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <main className="mx-auto mt-10 w-full max-w-xl">
-          <div className="rounded-3xl bg-zinc-900 border border-zinc-800 p-6">
-            <div className="text-2xl font-semibold">Takk!</div>
-            <div className="mt-2 text-zinc-300">
-              Innsendingen er mottatt. Vil du sende inn flere?
-            </div>
-
-            {lastSubmission ? (
-              <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-200">
-                <div>Type: {sentTypeLabel}</div>
-                <div>Antall bilder: {lastSubmission.imagesCount}</div>
-                <div className="mt-2 text-zinc-300">
-                  Kommentar: {lastSubmission.note ? lastSubmission.note : "Ingen"}
-                </div>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="h-12 rounded-2xl bg-amber-400 text-zinc-950 font-semibold active:opacity-90 disabled:opacity-60"
-              >
-                Send flere
-              </button>
-              {returnUrl ? (
-                <a
-                  href={returnUrl}
-                  className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
-                >
-                  ← {returnLabel}
-                </a>
-              ) : null}
-              <a
-                href={`${basePath}/admin/`}
-                className="h-12 rounded-2xl border border-zinc-700 text-zinc-100 font-semibold flex items-center justify-center active:opacity-90"
-              >
-                🎓 Logg inn i admin
-              </a>
-            </div>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  const typeLabel = submissionType === "BUNNBRETT_FOTO" ? "Bunnbrett foto" : "Kontrollfoto";
-
   return (
+    // After submission page
+    didSubmit ? 
+    <AfterSubmissionSection 
+      returnUrl={returnUrl} 
+      returnLabel={returnLabel} 
+      isOnline={isOnline} 
+      submissionInfo={lastSubmissionInfo} 
+      onClick={ () => {setDidSubmit(false)}} />
+    :
+    // Main page
     <div
       className="flex flex-col min-h-[100svh] px-4 pt-8"
       style={{
         paddingBottom: `calc(8rem + env(safe-area-inset-bottom) + ${bottomOverlayPx}px)`,
       }}
     >
-      <header className="mx-auto w-full max-w-xl">
-        <div className="flex items-center justify-between">
-          {returnUrl ? (
-            <a
-              href={returnUrl}
-              className="text-sm font-semibold text-zinc-200 hover:text-zinc-50"
-            >
-              ← {returnLabel}
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={onBack}
-              className="text-sm font-semibold text-zinc-200 hover:text-zinc-50"
-            >
-              ← Tilbake
-            </button>
-          )}
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-zinc-800 flex items-center justify-center">
-              <span className="text-sm font-semibold">VS</span>
-            </div>
-            <div>
-              <div className="text-lg font-semibold leading-6">
-                LEK-VarroaScan
-              </div>
-              <div className="text-xs text-zinc-400">v{appVersion}</div>
-            </div>
-          </div>
-          <a
-            href={`${basePath}/admin/`}
-            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
-          >
-            🎓 Admin
-          </a>
-        </div>
-
-        {!isOnline ? (
-          <div className="mt-4 rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-            Du er offline. Opplasting krever nett.
-          </div>
-        ) : null}
-
-      </header>
+      <CommonHeader url={returnUrl} label={returnLabel} isOnline={isOnline}></CommonHeader>
 
       <main className="mx-auto mt-6 w-full max-w-xl">
         <div className="rounded-3xl bg-zinc-900 border border-zinc-800 p-5">
@@ -795,7 +442,7 @@ export default function Home() {
                               Bilde {index + 1}
                             </div>
                             <div className="mt-1 text-xs text-zinc-500">
-                              {formatBytes(img.file.size)}
+                              {utils.formatBytes(img.file.size)}
                             </div>
                           </div>
                           <button
@@ -830,10 +477,24 @@ export default function Home() {
                     ) : null}
                   </div>
                 ))}
+
+                {/* GAMMEL: {images.length < MAX_IMAGES_PER_SUBMISSION ? (<label>...</label>) : null}
+                    NY: ingen grense på antall bilder - knappen vises alltid */}
+                <label className="h-40 rounded-2xl border border-dashed border-zinc-700 bg-zinc-950 flex items-center justify-center text-sm font-semibold text-zinc-200 active:opacity-90">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => onPickImages(e.target.files)}
+                  />
+                  + Legg til
+                </label>
               </div>
 
               <div className="mt-2 text-xs text-zinc-500">
-                Ubegrenset antall bilder. Maks {MAX_FILE_SIZE_MB} MB per bilde.
+                Ubegrenset antall bilder. Maks {utils.MAX_FILE_SIZE_MB} MB per bilde.
               </div>
             </div>
 
@@ -856,97 +517,12 @@ export default function Home() {
               </div>
             ) : null}
 
-            <button
-              type="button"
-              onClick={() => setShowTech((v) => !v)}
-              className="text-left text-xs text-zinc-400 hover:text-zinc-200"
-            >
-              {showTech ? "Skjul teknisk info" : "Vis teknisk info"}
-            </button>
-
-            {showTech ? (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs text-zinc-300">
-                <div>route: {pathname}</div>
-                <div>appVersion: {appVersion}</div>
-                <div>online: {String(isOnline)}</div>
-                <div>displayModeStandalone: {String(isStandaloneApp())}</div>
-                <div>fromBiensVokter: {String(isFromBiensVokter)}</div>
-                <div>source: {sourceParam ?? "—"}</div>
-                <div>
-                  supabaseUrl:{" "}
-                  {supabaseUrl
-                    ? (() => {
-                        try {
-                          const u = new URL(supabaseUrl);
-                          return u.origin;
-                        } catch {
-                          return supabaseUrl;
-                        }
-                      })()
-                    : "Mangler"}
-                </div>
-                {lastTech ? <div>feil: {lastTech}</div> : null}
-              </div>
-            ) : null}
-
-            <details className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3">
-              <summary className="cursor-pointer list-none text-xs font-semibold text-zinc-300">
-                Type (avansert): {typeLabel}
-              </summary>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setSubmissionType("BUNNBRETT_FOTO")}
-                  className={[
-                    "h-11 rounded-2xl border text-sm font-semibold",
-                    submissionType === "BUNNBRETT_FOTO"
-                      ? "border-amber-300 bg-amber-400 text-zinc-950"
-                      : "border-zinc-700 bg-zinc-950 text-zinc-100",
-                  ].join(" ")}
-                >
-                  Bunnbrett foto
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSubmissionType("KONTROLLFOTO")}
-                  className={[
-                    "h-11 rounded-2xl border text-sm font-semibold",
-                    submissionType === "KONTROLLFOTO"
-                      ? "border-amber-300 bg-amber-400 text-zinc-950"
-                      : "border-zinc-700 bg-zinc-950 text-zinc-100",
-                  ].join(" ")}
-                >
-                  Kontrollfoto
-                </button>
-              </div>
-              <div className="mt-3 text-xs text-zinc-500">
-                Bruk kontrollfoto hvis dere tester/kalibrerer eller vil skille testbilder fra ekte bunnbrett-bilder.
-              </div>
-            </details>
           </div>
+            <TechnicalInfoPanel isFromBiensVokter={isFromBiensVokter()} sourceParam={sourceParam} lastTech={lastTech}></TechnicalInfoPanel>
+            <PhototypeSection submissionType={submissionType} onSubmissionTypeChange={setSubmissionType} />
         </div>
       </main>
-
-      <div
-        className="fixed inset-x-0 z-40 border-t border-zinc-800 bg-zinc-950"
-        style={{
-          bottom: `calc(env(safe-area-inset-bottom) + ${bottomOverlayPx}px)`,
-        }}
-      >
-        <div className="mx-auto w-full max-w-xl px-4 py-3">
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={onSubmit}
-            className="h-12 w-full rounded-2xl bg-amber-400 text-zinc-950 font-semibold active:opacity-90 disabled:opacity-60"
-          >
-            {isSubmitting ? "Sender…" : "Send inn"}
-          </button>
-          <div className="mt-2 text-center text-[11px] text-zinc-500">
-            Metadata: tidspunkt, route, device, appversjon.
-          </div>
-        </div>
-      </div>
+      <SubmissionButtonSection isSubmitting={isSubmitting} onSubmit={onSubmit} bottomOverlayPx={bottomOverlayPx} />
     </div>
   );
 }
