@@ -12,10 +12,10 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { submitVarroaScan } from "@/lib/varroaScanDb";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import * as utils from "@/lib/utils";
-import { Submission, SubmissionType } from "@/lib/utils";
+import { SubmissionInfo, SubmissionType } from "@/lib/utils";
 
 // components
-import{CommonHeader} from "@/components/header";
+import { CommonHeader } from "@/components/header";
 import { TechnicalInfoPanel } from "@/components/technicalInfo";
 import { PhototypeSection } from "@/components/phototypeSection";
 import { SubmissionButtonSection } from "@/components/submissionButtonSection";
@@ -48,7 +48,7 @@ export default function Home() {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [didSubmit, setDidSubmit] = useState(false);
-  const [lastSubmission, setLastSubmission] = useState< Submission | null>(null);
+  const [lastSubmissionInfo, setLastSubmissionInfo] = useState< SubmissionInfo | null>(null);
   const [submissionType, setSubmissionType] = useState<SubmissionType>("BUNNBRETT_FOTO");
   
   const [bottomOverlayPx, setBottomOverlayPx] = useState(0);
@@ -289,7 +289,7 @@ export default function Home() {
     setError(null);
     setIsSubmitting(false);
     setDidSubmit(false);
-    setLastSubmission(null);
+    setLastSubmissionInfo(null);
     setImages((prev) => {
       for (const img of prev) URL.revokeObjectURL(img.previewUrl);
       return [];
@@ -311,135 +311,17 @@ export default function Home() {
     }
 
     const supabase = getSupabaseClient();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-    if (!supabase || !supabaseUrl || !anonKey) {
-      setError("Appen mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY).");
+    // const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
+    // const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+    // if (!supabase || !supabaseUrl || !anonKey) {
+    if (!supabase) {
+      setError("Appen mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_URL).");
       return;
     }
 
     let step = "Starter";
     setIsSubmitting(true);
     try {
-      /* GAMMEL (mot varroa_submissions - én tabell i gammel database):
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-      const userId = session?.user?.id ?? null;
-      const userName =
-        (session?.user?.user_metadata?.name as string | undefined) ?? null;
-      const jwtMaybe = (session?.access_token as string | undefined) ?? null;
-
-      const noteValue = note.trim() ? note.trim() : null;
-
-      const submissionId = crypto.randomUUID();
-      const uploadedPaths: string[] = [];
-
-      for (const [index, img] of images.entries()) {
-        step = `Laster opp bilde ${index + 1}/${images.length}`;
-        const ext = img.file.name.split(".").pop()?.toLowerCase();
-        const safeExt = ext && ext.length <= 10 ? ext : "jpg";
-        const filename = crypto.randomUUID() + "." + safeExt;
-        const objectPath = `submissions/${submissionId}/${filename}`;
-
-        // 🎯 Vi bruker DIREKTE fetch for å laste opp → slipper alt av supabase-js bugs
-        //    Vi tar OGSÅ AUTH tokenet med bare hvis det finnes (ANON sender kun API key)
-        const url = `${supabaseUrl}/storage/v1/object/varroa-submissions/${encodeURIComponent(objectPath)}`;
-        const headers: Record<string, string> = {
-          "apikey": anonKey,
-          "Authorization": `Bearer ${jwtMaybe ?? anonKey}`,
-          "cache-control": "max-age=3600",
-          "x-upsert": "false",
-        };
-        if (img.file.type) headers["content-type"] = img.file.type;
-
-        let response: Response;
-        try {
-          response = await fetch(url, { method: "POST", headers, body: img.file });
-        } catch (fetchErr) {
-          // Nettverksfeil (typisk CORS) — viser tydelig hva det er!
-          const msg =
-            fetchErr instanceof TypeError &&
-            (fetchErr.message.toLowerCase().includes("failed") || fetchErr.message === "Failed to fetch")
-              ? `CORS FEIL: Appens domene er IKKE lagt til i Supabase → Project Settings → API → CORS Origins. Legg til https://lek-varroa-scan.vercel.app (og https://*.vercel.app), lagre, prøv igjen. (${fetchErr.message})`
-              : `Nettverksfeil ved bildeopplasting: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}`;
-          throw new Error(msg);
-        }
-
-        let body: unknown = null;
-        try { body = await response.json(); } catch {}
-        if (!response.ok) {
-          const firstLine =
-            typeof body === "object" && body && "message" in body
-              ? String((body as { message: unknown }).message ?? "")
-              : "";
-          const status = response.status;
-          let friendly = `HTTP ${status} ved opplasting av bilde.`;
-          if (status === 400) friendly += ` 400 = Feil request, sjekk CORS/headers. ${firstLine}`;
-          else if (status === 401) friendly += ` 401 = Uautorisert (feil API-key/sesjon). ${firstLine}`;
-          else if (status === 403) friendly += ` 403 = NEKTE (Storage RLS Policy / bucket-tilgang — KJØR DEN STØRRE SQLen du fikk! ${firstLine}`;
-          else if (status === 404) friendly += ` 404 = Bucket finnes IKKE (kjør SQL INSERT for bucket). ${firstLine}`;
-          else if (status === 413) friendly += ` 413 = BILDE FOR STORT (over 15MB bucket limit). ${firstLine}`;
-          else if (status === 415) friendly += ` 415 = Feil filtype (ikke tillatt i bucket allowed_mime_types). ${firstLine}`;
-          else friendly += ` Feilmelding fra backend: ${firstLine}`;
-          throw new Error(friendly);
-        }
-
-        uploadedPaths.push(objectPath);
-      }
-
-      const firstImagePath = uploadedPaths[0] ?? null;
-      const imageUrl =
-        firstImagePath
-          ? `${supabaseUrl}/storage/v1/object/authenticated/varroa-submissions/${firstImagePath}`
-          : null;
-
-      step = "Oppretter innsending";
-      const insertPayload: Record<string, unknown> = {
-        id: submissionId,
-        image_url: imageUrl,
-        beekeeper_name: userName,
-        apiary_name: null,
-        comment: noteValue,
-        mite_count_manual: null,
-        reviewed_by: null,
-        review_status: "pending",
-        user_id: userId,
-        user_name: userName,
-        type: submissionType,
-        images: uploadedPaths,
-        image_notes: images.map((img) => (img.note.trim() ? img.note.trim() : null)),
-        note: noteValue,
-        source: sourceParam ?? "web",
-        app_version: appVersion,
-        device_info: getDeviceInfo(),
-        route: pathname,
-        status: "NY",
-      };
-
-      let insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
-      if (insertRes.error && utils.isMissingImageNotesColumnError(insertRes.error)) {
-        delete insertPayload.image_notes;
-        insertRes = await supabase.from("varroa_submissions").insert(insertPayload);
-      }
-      if (insertRes.error) {
-        const rawMsg = insertRes.error.message ?? "";
-        const code = insertRes.error.code ?? "";
-        if (insertRes.error.code === "42501" || rawMsg.toLowerCase().includes("row-level") || rawMsg.includes("policy")) {
-          throw new Error(
-            `RLS policy blokkerer INSERT i varroa_submissions. Kjør SQL for varroa_submissions_insert_anyone (sendt tidligere i dag). Details: ${code} ${rawMsg}`,
-          );
-        }
-        throw new Error(`DB insert feilet: ${code} ${rawMsg}`);
-      }
-
-      setLastSubmission({
-        id: submissionId,
-        type: submissionType,
-        note: noteValue,
-        imagesCount: uploadedPaths.length,
-      });
-      */
-
       // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
       const noteValue = note.trim() ? note.trim() : null;
 
@@ -455,7 +337,7 @@ export default function Home() {
         },
       });
 
-      setLastSubmission({
+      setLastSubmissionInfo({
         id: submissionId,
         type: submissionType,
         note: noteValue,
@@ -468,7 +350,8 @@ export default function Home() {
       });
       setNote("");
     } catch (e) {
-      const raw = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : utils.normalizeErrorMessage(e);
+      // const raw = e instanceof Error ? e.message : String(e);
       setLastTech(`${step}: ${raw}`);
       setError(`Kunne ikke sende inn (${step}): ${raw}`);
     } finally {
@@ -476,17 +359,17 @@ export default function Home() {
     }
   };
 
-
-  // A completely different page that shows when something was submitted
   return (
+    // After submission page
     didSubmit ? 
     <AfterSubmissionSection 
       returnUrl={returnUrl} 
       returnLabel={returnLabel} 
       isOnline={isOnline} 
-      lastSubmission={lastSubmission} 
+      submissionInfo={lastSubmissionInfo} 
       onClick={ () => {setDidSubmit(false)}} />
     :
+    // Main page
     <div
       className="flex flex-col min-h-[100svh] px-4 pt-8"
       style={{
