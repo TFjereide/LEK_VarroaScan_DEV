@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type WheelEvent as ReactWheelEvent,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import {
   appendAdminContext,
@@ -90,6 +98,325 @@ function createDraftFromImageReview(review: VarroaSubmissionImageReview): ImageR
     trainingReady: Boolean(review.training_ready),
     approved: Boolean(review.approved),
   };
+}
+
+/**
+ * Zoomable / pannable image view.
+ *
+ *  - Desktop:   scroll = zoom, double click = toggle zoom, drag with mouse = pan
+ *  - Mobile/touch: pinch = zoom, two-finger or single drag = pan
+ *  - Toolbar with zoom in / out / 1x / fit buttons
+ */
+function ZoomableImage({
+  src,
+  alt,
+}: {
+  src: string;
+  alt: string;
+}) {
+  const MIN_SCALE = 1;
+  const MAX_SCALE = 10;
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const [scale, setScale] = useState(1);
+  const [tx, setTx] = useState(0);
+  const [ty, setTy] = useState(0);
+
+  // Live refs used by event handlers to avoid stale closures
+  const viewRef = useRef({ scale: 1, tx: 0, ty: 0 });
+  useEffect(() => {
+    viewRef.current = { scale, tx, ty };
+  }, [scale, tx, ty]);
+
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchState = useRef<{
+    startDist: number;
+    startScale: number;
+    startMidX: number;
+    startMidY: number;
+    startTx: number;
+    startTy: number;
+  } | null>(null);
+  const dragState = useRef<{
+    startX: number;
+    startY: number;
+    startTx: number;
+    startTy: number;
+    moved: boolean;
+  } | null>(null);
+
+  const reset = useCallback(() => {
+    setScale(1);
+    setTx(0);
+    setTy(0);
+  }, []);
+
+  // Reset zoom when the image URL changes (new image selected)
+  useEffect(() => {
+    reset();
+  }, [src, reset]);
+
+  const clampTxTy = useCallback(
+    (nextScale: number, nextTx: number, nextTy: number): [number, number] => {
+      const img = imgRef.current;
+      const box = containerRef.current;
+      if (!img || !box || nextScale <= 1) return [0, 0];
+      const rect = box.getBoundingClientRect();
+      const imgW = img.clientWidth || rect.width;
+      const imgH = img.clientHeight || rect.height;
+      const maxTx = Math.max(0, ((imgW * nextScale) - rect.width) / 2);
+      const maxTy = Math.max(0, ((imgH * nextScale) - rect.height) / 2);
+      return [
+        Math.max(-maxTx, Math.min(maxTx, nextTx)),
+        Math.max(-maxTy, Math.min(maxTy, nextTy)),
+      ];
+    },
+    [],
+  );
+
+  const applyZoomAt = useCallback(
+    (
+      clientX: number,
+      clientY: number,
+      newScale: number,
+    ) => {
+      const box = containerRef.current;
+      const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, newScale));
+      if (!box) {
+        viewRef.current.scale = nextScale;
+        viewRef.current.tx = 0;
+        viewRef.current.ty = 0;
+        setScale(nextScale);
+        setTx(0);
+        setTy(0);
+        return;
+      }
+      const rect = box.getBoundingClientRect();
+      const px = clientX - rect.left - rect.width / 2;
+      const py = clientY - rect.top - rect.height / 2;
+      const cur = viewRef.current;
+      const k = nextScale / Math.max(0.0001, cur.scale);
+      const nextTxRaw = px - (px - cur.tx) * k;
+      const nextTyRaw = py - (py - cur.ty) * k;
+      const [txN, tyN] = clampTxTy(nextScale, nextTxRaw, nextTyRaw);
+      viewRef.current = { scale: nextScale, tx: txN, ty: tyN };
+      setScale(nextScale);
+      setTx(txN);
+      setTy(tyN);
+    },
+    [clampTxTy],
+  );
+
+  const onWheel = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (viewRef.current.scale === 1 && e.deltaY > 0) return;
+    e.preventDefault();
+    const delta = -e.deltaY;
+    const factor = delta > 0 ? 1.15 : 1 / 1.15;
+    applyZoomAt(e.clientX, e.clientY, viewRef.current.scale * factor);
+  };
+
+  const startPanFromPointer = (clientX: number, clientY: number) => {
+    const cur = viewRef.current;
+    dragState.current = {
+      startX: clientX,
+      startY: clientY,
+      startTx: cur.tx,
+      startTy: cur.ty,
+      moved: false,
+    };
+  };
+
+  const movePan = (clientX: number, clientY: number) => {
+    const st = dragState.current;
+    if (!st) return;
+    const cur = viewRef.current;
+    const dx = clientX - st.startX;
+    const dy = clientY - st.startY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) st.moved = true;
+    if (cur.scale <= 1) return;
+    const [txN, tyN] = clampTxTy(cur.scale, st.startTx + dx, st.startTy + dy);
+    viewRef.current.tx = txN;
+    viewRef.current.ty = tyN;
+    setTx(txN);
+    setTy(tyN);
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Pinch start:
+    if (pointers.current.size === 2) {
+      const arr = Array.from(pointers.current.values());
+      const [p1, p2] = arr;
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const cur = viewRef.current;
+      pinchState.current = {
+        startDist: dist,
+        startScale: cur.scale,
+        startMidX: midX,
+        startMidY: midY,
+        startTx: cur.tx,
+        startTy: cur.ty,
+      };
+      dragState.current = null;
+      return;
+    }
+
+    // Single pointer:
+    if (pointers.current.size === 1) {
+      startPanFromPointer(e.clientX, e.clientY);
+      pinchState.current = null;
+    }
+  };
+
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Pinch:
+    if (pinchState.current && pointers.current.size === 2) {
+      const arr = Array.from(pointers.current.values());
+      const [p1, p2] = arr;
+      const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+      const ps = pinchState.current;
+      const k = dist / Math.max(0.0001, ps.startDist);
+      const nextScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, ps.startScale * k));
+
+      const box = containerRef.current?.getBoundingClientRect();
+      if (box) {
+        const cx = ps.startMidX - box.left - box.width / 2;
+        const cy = ps.startMidY - box.top - box.height / 2;
+        const kRatio = nextScale / Math.max(0.0001, ps.startScale);
+        const nTx = cx - (cx - ps.startTx) * kRatio + (midX - ps.startMidX);
+        const nTy = cy - (cy - ps.startTy) * kRatio + (midY - ps.startMidY);
+        const [txN, tyN] = clampTxTy(nextScale, nTx, nTy);
+        viewRef.current = { scale: nextScale, tx: txN, ty: tyN };
+        setScale(nextScale);
+        setTx(txN);
+        setTy(tyN);
+      } else {
+        viewRef.current.scale = nextScale;
+        setScale(nextScale);
+      }
+      return;
+    }
+
+    // Single pointer pan:
+    if (pointers.current.size === 1 && dragState.current && pinchState.current == null) {
+      movePan(e.clientX, e.clientY);
+    }
+  };
+
+  const onPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    try { target.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+    pointers.current.delete(e.pointerId);
+
+    if (pointers.current.size < 2) pinchState.current = null;
+    if (pointers.current.size === 0) {
+      const st = dragState.current;
+      dragState.current = null;
+      // Tap without drag on single pointer → handled via double click separately.
+      void st;
+    }
+  };
+
+  const onDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (viewRef.current.scale > 1.05) {
+      reset();
+    } else {
+      applyZoomAt(e.clientX, e.clientY, 3);
+    }
+  };
+
+  const zoomBy = (factor: number) => {
+    const box = containerRef.current?.getBoundingClientRect();
+    const cx = box ? box.left + box.width / 2 : 0;
+    const cy = box ? box.top + box.height / 2 : 0;
+    applyZoomAt(cx, cy, viewRef.current.scale * factor);
+  };
+
+  return (
+    <div className="relative select-none">
+      <div
+        ref={containerRef}
+        onWheel={onWheel}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={onDoubleClick as unknown as (e: ReactPointerEvent<HTMLDivElement>) => void}
+        className={
+          (scale > 1 ? "cursor-grab active:cursor-grabbing " : "") +
+          "overflow-hidden rounded-3xl bg-zinc-950 touch-none"
+        }
+        style={{ touchAction: "none" }}
+      >
+        <div
+          className="flex h-[55vh] w-full items-center justify-center xl:h-[70vh]"
+          style={{
+            transform: `translate3d(${tx}px, ${ty}px, 0) scale(${scale})`,
+            transformOrigin: "center center",
+            transition: "transform 80ms ease-out",
+          }}
+        >
+          <img
+            ref={imgRef}
+            src={src}
+            alt={alt}
+            draggable={false}
+            className="h-auto max-h-full w-auto max-w-full object-contain"
+          />
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-zinc-300">
+        <span className="mr-2 rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1.5">
+          Zoom: {Math.round(scale * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={() => zoomBy(2 / 1.5)}
+          className="h-9 rounded-xl border border-zinc-700 bg-zinc-950 px-3 hover:bg-zinc-900 active:opacity-90"
+        >
+          ➕ Zoom inn
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomBy(1.5 / 2)}
+          className="h-9 rounded-xl border border-zinc-700 bg-zinc-950 px-3 hover:bg-zinc-900 active:opacity-90"
+        >
+          ➖ Zoom ut
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomBy(3 / scale)}
+          className="h-9 rounded-xl border border-zinc-700 bg-zinc-950 px-3 hover:bg-zinc-900 active:opacity-90"
+        >
+          🔍 300%
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          className="h-9 rounded-xl border border-zinc-700 bg-zinc-950 px-3 hover:bg-zinc-900 active:opacity-90"
+        >
+          ↺ Tilpass
+        </button>
+      </div>
+
+      <div className="mt-2 text-center text-[11px] text-zinc-500">
+        Mus: dobbeltklikk = zoom 300% / tilbake • scroll = zoom • dra for å panorere. Mobil: knip to fingre for å zoome, dra for å panorere.
+      </div>
+    </div>
+  );
 }
 
 export function ProductionSubmissionClient() {
@@ -817,12 +1144,11 @@ export function ProductionSubmissionClient() {
                     ferdigstilt.
                   </div>
                 ) : null}
-                <div className="mt-4 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950">
+                <div className="mt-4 rounded-3xl border border-zinc-800 bg-zinc-950 p-2">
                   {currentImage ? (
-                    <img
+                    <ZoomableImage
                       src={currentImage.url}
                       alt="Varroa-bilde"
-                      className="h-[55vh] w-full object-contain xl:h-[70vh]"
                     />
                   ) : (
                     <div className="flex h-[55vh] items-center justify-center text-sm text-zinc-500 xl:h-[70vh]">
