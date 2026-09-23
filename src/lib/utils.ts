@@ -102,6 +102,8 @@ export function normalizeInternalRedirectPath(value: string | null) {
   if (!raw) return null;
   if (!raw.startsWith("/")) return null;
   if (raw.startsWith("//")) return null;
+  if (raw.startsWith("/api/")) return null;
+
   return raw;
 }
 
