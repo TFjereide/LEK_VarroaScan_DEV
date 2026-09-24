@@ -4,7 +4,12 @@ import { CommonHeader } from "@/components/header";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SubmitEvent } from "react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { loginWithPassword } from '@/lib/auth/actions';
+import { loginWithPassword, registerUser } from '@/lib/auth/actions';
+
+import{ LoginUserForm } from "@/components/login/loginUserForm";
+import{ RegisterUserForm } from "@/components/login/registerUserForm";
+import{ ForgotPasswordForm } from "@/components/login/forgotPasswordForm";
+import{ RecoverPasswordForm } from "@/components/login/recoverPasswordForm";
 
 
 type VarroaUserRecord = {
@@ -27,10 +32,6 @@ type PageMode =
 
 export default function LogInPage() {
     const isOnline = useOnlineStatus();
-
-    const passwordMinLength = 6;
-
-
     const [friendlyMsg, setFriendlyMsg] = useState<String | null>(null);
 
     const [pageMode, setPageMode] = useState<PageMode>(() => {
@@ -41,43 +42,6 @@ export default function LogInPage() {
         setFriendlyMsg(null);
         return params.get("type") === "recovery" ? "recovery" : "login";
     });
-
-    const onLogin = (event: SubmitEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
-        const formdata = new FormData(event.currentTarget);
-        const email = formdata.get("email");
-        const password = formdata.get("password");
-
-        if (typeof (email) !== "string" || typeof (password) !== "string") {
-            setFriendlyMsg("Du må skrive inn en epost-addresse og passord.")
-            return;
-        }
-        loginWithPassword(email, password);
-    }
-
-    const onLogInLink = () => { }
-    const onRecovery = (event: SubmitEvent<HTMLFormElement>) => { }
-    const onForgot = (event: SubmitEvent<HTMLFormElement>) => { }
-    const onRegister = (event: SubmitEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
-        const formdata = new FormData(event.currentTarget);
-        const email = formdata.get("email");
-        const password = formdata.get("password");
-        const passwordConfirm = formdata.get("confirm-password");
-
-        if (typeof (email) !== "string" || typeof (password) !== "string" ||  typeof (passwordConfirm) !== "string")  {
-            setFriendlyMsg("Du må skrive inn alle feltene.")
-            return;
-        }
-        if( password != passwordConfirm){
-            setFriendlyMsg("passordene må være like.")
-            return;
-        }
-        
-     }
-
 
     return (
         <div className="min-h-dvh px-4 pb-10 pt-8">
@@ -154,206 +118,12 @@ export default function LogInPage() {
                             </>
                         )}
                     </div>
+                    
+                    {pageMode === "login" ? <LoginUserForm setMsg={setFriendlyMsg}/> : null}
+                    {pageMode === "register" ?<RegisterUserForm setMsg={setFriendlyMsg}/>: null}
+                    {pageMode === "forgot" ? <ForgotPasswordForm setMsg={setFriendlyMsg}/>: null}
+                    {pageMode === "recovery" ? <RecoverPasswordForm setMsg={setFriendlyMsg}/> : null}
 
-                    {pageMode === "login" ?
-                        <form onSubmit={onLogin} className="mt-6 grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    E-post
-                                </label>
-                                <input
-                                    name="email"
-                                    autoComplete="email"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    type="email"
-                                    required
-                                    placeholder="fornavn.etternavn@stud.hiof.no"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    Passord
-                                </label>
-                                <input
-                                    name="password"
-                                    autoComplete="current-password"
-                                    type="password"
-                                    required
-                                    placeholder="••••••••"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-                            <div className="mt-6 grid grid-cols-1 gap-3">
-                                <button
-                                    type="submit"
-                                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                                >
-                                    {"🔐 Logg inn med passord"}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onLogInLink}
-                                    className="h-12 rounded-2xl border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-50 active:opacity-90 disabled:opacity-60 hover:bg-zinc-900"
-                                >
-                                    📧 Send meg en innloggingslenke på e-post (alternativ)
-                                </button>
-                            </div>
-                        </form>
-                        : null
-                    }
-                    {pageMode === "register" ?
-                        <form onSubmit={onRegister} className="mt-6 grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    E-post
-                                </label>
-                                <input
-                                    name="email"
-                                    autoComplete="email"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    type="email"
-                                    required
-                                    placeholder="mail@domain.com"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    Passord
-                                </label>
-                                <input
-                                    name="password"
-                                    type="password"
-                                    minLength={passwordMinLength}
-                                    required
-                                    placeholder="Minst 6 tegn"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    Gjenta Passord
-                                </label>
-                                <input
-                                    name="confirm-password"
-                                    type="password"
-                                    required
-                                    placeholder="gjenta passord"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-
-                            <div className="mt-6 grid grid-cols-1 gap-3">
-                                <button
-                                    type="submit"
-                                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                                >
-                                    {"Registrer"}
-                                </button>
-                            </div>
-                        </form>
-                        : null}
-                    {pageMode === "forgot" ?
-                        <form onSubmit={onForgot} className="mt-6 grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    E-post
-                                </label>
-                                <input
-                                    name="email"
-                                    autoComplete="email"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    type="email"
-                                    placeholder="fornavn.etternavn@stud.hiof.no"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    Passord
-                                </label>
-                                <input
-                                    name="password"
-                                    autoComplete="current-password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-                            <div className="mt-6 grid grid-cols-1 gap-3">
-                                <button
-                                    type="submit"
-                                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                                >
-                                    {"🔐 Logg inn med passord"}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onLogInLink}
-                                    className="h-12 rounded-2xl border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-50 active:opacity-90 disabled:opacity-60 hover:bg-zinc-900"
-                                >
-                                    📧 Send meg en innloggingslenke på e-post (alternativ)
-                                </button>
-                            </div>
-                        </form>
-                        : null}
-                    {pageMode === "recovery" ?
-                        <form onSubmit={onRecovery} className="mt-6 grid grid-cols-1 gap-4">
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    E-post
-                                </label>
-                                <input
-                                    name="email"
-                                    autoComplete="email"
-                                    autoCapitalize="none"
-                                    autoCorrect="off"
-                                    spellCheck={false}
-                                    type="email"
-                                    placeholder="fornavn.etternavn@stud.hiof.no"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-zinc-300">
-                                    Passord
-                                </label>
-                                <input
-                                    name="password"
-                                    autoComplete="current-password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                                />
-                            </div>
-                            <div className="mt-6 grid grid-cols-1 gap-3">
-                                <button
-                                    type="submit"
-                                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                                >
-                                    {"🔐 Logg inn med passord"}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={onLogInLink}
-                                    className="h-12 rounded-2xl border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-50 active:opacity-90 disabled:opacity-60 hover:bg-zinc-900"
-                                >
-                                    📧 Send meg en innloggingslenke på e-post (alternativ)
-                                </button>
-                            </div>
-                        </form>
-                        : null}
                 </div>
                 {friendlyMsg ? (
                     <div className="mt-5 rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
@@ -364,5 +134,4 @@ export default function LogInPage() {
             </main>
         </div>
     )
-
 }
