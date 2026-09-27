@@ -15,11 +15,18 @@ import {
   createSignedImages,
   formatWorkerLabel,
   formatDateTime,
+  // NYE imports: findApprovedBy erstatter item.approved_by (den kolonnen
+  // finnes ikke lenger), getHistorySelect() gir riktig spørring mot
+  // submission_history, getSubmissionImagePaths() gjør om images-relasjonen
+  // til et vanlig string[] slik koden allerede forventet.
+  findApprovedBy,
   getDisplayNameFromEmail,
   getHistoryActionLabel,
+  getHistorySelect,
   getQualityOptions,
   getRoleLabel,
   getStatusUi,
+  getSubmissionImagePaths,
   getSubmissionSelect,
   getTypeLabel,
   getWorkflowMigrationMessage,
@@ -974,9 +981,15 @@ export function ProductionSubmissionClient() {
         return;
       }
 
+      // GAMMEL: leste fra varroa_submissions og varroa_submission_history
+      // (gamle databasen, finnes ikke lenger). NY: submissions/
+      // submission_history er de nye tabellnavnene. Historikk-spørringen
+      // bruker nå getHistorySelect(), som henter de faktiske kolonnene
+      // (changed_by/changed_at) men gir dem tilbake under de gamle
+      // feltnavnene (user_id/created_at) slik resten av filen forventer.
       const [submissionRes, reviewsRes, historyRes, imageReviewsRes] = await Promise.all([
         supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select(getSubmissionSelect())
           .eq("id", id)
           .maybeSingle(),
@@ -989,10 +1002,10 @@ export function ProductionSubmissionClient() {
           .order("updated_at", { ascending: false })
           .limit(20),
         supabase
-          .from("varroa_submission_history")
-          .select("id,submission_id,created_at,user_id,action,from_status,to_status,comment,payload")
+          .from("submission_history")
+          .select(getHistorySelect())
           .eq("submission_id", id)
-          .order("created_at", { ascending: false })
+          .order("changed_at", { ascending: false })
           .limit(40),
         supabase
           .from("varroa_submission_review_images")
@@ -1046,9 +1059,13 @@ export function ProductionSubmissionClient() {
         (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
       const loadedHistory =
         (historyRes.data ?? []) as unknown as VarroaSubmissionHistory[];
+      // GAMMEL: loaded.images var et flatt string[] direkte på raden.
+      // NY: images er en egen relasjon ({image_path: string}[]) hentet inn
+      // via getSubmissionSelect() - getSubmissionImagePaths() gjør den om
+      // til det samme flate string[]-formatet som før.
       const signedImages = await createSignedImages(
         supabase,
-        Array.isArray(loaded.images) ? loaded.images : [],
+        getSubmissionImagePaths(loaded),
       );
 
       setItem(loaded);
@@ -1079,6 +1096,12 @@ export function ProductionSubmissionClient() {
       if (loadedImageReviews.length === 0 && latestReview) {
         const fallbackIndex = Math.min(Math.max(nextImageIndex, 0), Math.max(signedImages.length - 1, 0));
         const annotations = extractAnnotationsFromImageNotes(sharedImageNotes, fallbackIndex);
+        // GAMMEL: falt tilbake på loaded.manual_mite_count / loaded.quality_rating /
+        // loaded.review_comment når det ikke fantes en per-bilde-vurdering ennå.
+        // NY: disse tre kolonnene finnes ikke lenger på submissions - de var
+        // aldri noe annet enn et utgangspunkt for review-verdiene, så vi
+        // faller nå bare tilbake på tomt/false når verken annotations eller
+        // review-raden har noe.
         nextDrafts[fallbackIndex] = {
           imageIndex: fallbackIndex,
           miteCountInput:
@@ -1086,11 +1109,9 @@ export function ProductionSubmissionClient() {
               ? String(annotations.length)
               : latestReview.mite_count != null
                 ? String(latestReview.mite_count)
-                : loaded.manual_mite_count != null
-                  ? String(loaded.manual_mite_count)
-                  : "",
-          imageQuality: latestReview.image_quality ?? loaded.quality_rating ?? "",
-          comment: latestReview.comment ?? loaded.review_comment ?? "",
+                : "",
+          imageQuality: latestReview.image_quality ?? "",
+          comment: latestReview.comment ?? "",
           trainingReady: Boolean(latestReview.training_ready ?? loaded.training_ready),
           approved: Boolean(latestReview.approved),
           annotations,
@@ -1191,7 +1212,11 @@ export function ProductionSubmissionClient() {
         ? null
         : Number.parseInt(currentDraft.miteCountInput.trim(), 10);
 
-    const nowIso = new Date().toISOString();
+    // GAMMEL: nowIso ble brukt til å sette assigned_at/processed_at/
+    // approved_at/returned_at manuelt under. NY: ingen av de kolonnene
+    // finnes lenger på submissions (submissions.updated_at settes
+    // automatisk av en trigger i databasen, og "når/hvem" for statusbytter
+    // ligger nå i submission_history sin egen changed_at, satt av DB).
     let nextStatus = item.status;
     let nextTrainingReady = allImagesTrainingReady;
     let approved = false;
@@ -1250,41 +1275,26 @@ export function ProductionSubmissionClient() {
     const historyFromStatus = isImageStep ? null : item.status;
     const historyToStatus = isImageStep ? null : nextStatus;
 
+    // GAMMEL: updatePatch skrev manual_mite_count/quality_rating/
+    // review_comment/current_role_owner samt assigned_at/processed_at/
+    // approved_by/approved_at/returned_by/returned_at til submissions.
+    // NY: de fire første flyttet til per-bilde-review (allerede lagret via
+    // reviewPayload/imageReviewRows under), og de seks siste finnes ikke
+    // som kolonner lenger - "hvem/når" for statusbytter er nå raden vi
+    // uansett setter inn i submission_history rett under. updatePatch
+    // beholder derfor bare de kolonnene som faktisk finnes på submissions.
     const updatePatch: Record<string, unknown> = {
       status: nextStatus,
-      manual_mite_count: totalDraftMites,
-      quality_rating: currentDraft.imageQuality || null,
-      review_comment: historyComment,
       training_ready: nextTrainingReady,
-      current_role_owner:
-        action === "RETURNED" ? "ARBEID" : action === "READY_FOR_REVIEW" ? "KONTROLL" : access.role,
     };
 
     if (action === "SAVE_DRAFT" || action === "READY_FOR_REVIEW" || action === "SAVE_AND_NEXT") {
       updatePatch.assigned_to = item.assigned_to ?? access.userId;
-      updatePatch.assigned_at = item.assigned_at ?? nowIso;
       updatePatch.processed_by = access.userId;
-      updatePatch.processed_at = item.processed_at ?? nowIso;
-    }
-
-    if (action === "APPROVED" || action === "APPROVED_FOR_TRAINING") {
-      updatePatch.approved_by = access.userId;
-      updatePatch.approved_at = nowIso;
-      updatePatch.returned_by = null;
-      updatePatch.returned_at = null;
     }
 
     if (action === "RETURNED") {
-      updatePatch.returned_by = access.userId;
-      updatePatch.returned_at = nowIso;
-      updatePatch.approved_by = null;
-      updatePatch.approved_at = null;
       updatePatch.assigned_to = item.processed_by ?? item.assigned_to;
-    }
-
-    if (action === "ARCHIVED") {
-      updatePatch.approved_by = item.approved_by ?? access.userId;
-      updatePatch.approved_at = item.approved_at ?? nowIso;
     }
 
     setIsSaving(true);
@@ -1371,15 +1381,20 @@ export function ProductionSubmissionClient() {
 
       if (imageReviewRes.error) throw imageReviewRes.error;
 
+      // GAMMEL: skrev til varroa_submissions/varroa_submission_history
+      // (gamle databasen). NY: submissions/submission_history. Historikk-
+      // innsettingen bruker changed_by (ekte kolonnenavn) i stedet for
+      // user_id - alias-navn som getHistorySelect() bruker på SELECT
+      // virker ikke på INSERT, der må man bruke de faktiske kolonnenavnene.
       const updateRes = await supabase
-        .from("varroa_submissions")
+        .from("submissions")
         .update(updatePatch)
         .eq("id", item.id);
       if (updateRes.error) throw updateRes.error;
 
-      const historyRes = await supabase.from("varroa_submission_history").insert({
+      const historyRes = await supabase.from("submission_history").insert({
         submission_id: item.id,
-        user_id: access.userId,
+        changed_by: access.userId,
         action: historyAction,
         from_status: historyFromStatus,
         to_status: historyToStatus,
@@ -1405,13 +1420,17 @@ export function ProductionSubmissionClient() {
           action === "RETURNED" ||
           action === "ARCHIVED")
       ) {
+        // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+        // .select("id")-spørring på "created_at" - som bare er et alias fra
+        // getSubmissionSelect() og derfor ikke finnes utenfor den. NY:
+        // riktig tabellnavn + sortering på den ekte kolonnen submission_date.
         const nextControlRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "KLAR_FOR_KONTROLL")
           .neq("processed_by", access.userId)
           .neq("id", item.id)
-          .order("created_at", { ascending: true })
+          .order("submission_date", { ascending: true })
           .limit(1)
           .maybeSingle();
 
@@ -1428,7 +1447,7 @@ export function ProductionSubmissionClient() {
         }
 
         const underWorkRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "UNDER_ARBEID")
           .or(`assigned_to.eq.${access.userId},processed_by.eq.${access.userId}`)
@@ -1477,8 +1496,11 @@ export function ProductionSubmissionClient() {
           );
           return;
         }
+        // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
+        // er en ekte kolonne (satt automatisk av DB-triggeren), så
+        // sorteringen her trengte ingen endring utover tabellnavnet.
         const underWorkRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "UNDER_ARBEID")
           .or(`assigned_to.eq.${access.userId},processed_by.eq.${access.userId}`)
@@ -1638,7 +1660,10 @@ export function ProductionSubmissionClient() {
                   </div>
                   <div>
                     <div className="text-zinc-500">Godkjent av</div>
-                    <div className="mt-1">{formatWorkerLabel(access.userId, item.approved_by)}</div>
+                    {/* GAMMEL: item.approved_by (kolonnen finnes ikke lenger).
+                        NY: findApprovedBy(history) leter i historikken etter
+                        siste gang saken ble GODKJENT/KLAR_FOR_TRENING. */}
+                    <div className="mt-1">{formatWorkerLabel(access.userId, findApprovedBy(history))}</div>
                   </div>
                   <div>
                     <div className="text-zinc-500">Oppdatert</div>

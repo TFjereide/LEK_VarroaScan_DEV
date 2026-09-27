@@ -24,6 +24,7 @@ export type ImageStatus = "pending" | "analyzed" | "failed";
 export type SubmissionStatus = "NY" | "UNDER_ARBEID" | "ARKIVERT";
 export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
+//beskriver formen på dataene i databasen
 export type SubmissionImageRow = {
   image_id: string;
   submission_id: string;
@@ -36,6 +37,7 @@ export type SubmissionImageRow = {
   created_at: string;
 };
 
+//beskriver formen på dataene i databasen
 export type SubmissionRow = {
   id: string;
   submission_date: string;
@@ -51,6 +53,7 @@ export type SubmissionWithImages = SubmissionRow & {
   images: SubmissionImageRow[];
 };
 
+//Henter data fra databasen 
 const SUBMISSION_SELECT =
   "id, submission_date, source, device_info, app_version, comment, status, type, " +
   "images(image_id, submission_id, image_path, quality, notes, image_status, meta_data, mite_count, created_at)";
