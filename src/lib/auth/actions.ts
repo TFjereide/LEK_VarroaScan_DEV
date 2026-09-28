@@ -21,7 +21,7 @@ export async function loginWithPassword(email: string, password: string): Promis
         password,
     });
 
-    return { user: await getUserFromSupabase(data.user), error: toAppAuthError(error) };
+    return { user: await getAppUserFromAuth(data.user), error: toAppAuthError(error) };
 }
 
 /**
@@ -36,7 +36,7 @@ export async function registerUser(email: string, password: string): Promise<Aut
             emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/`
         },
     });
-    return { user: await getUserFromSupabase(data.user), error: toAppAuthError(error) };
+    return { user: await getAppUserFromAuth(data.user), error: toAppAuthError(error) };
 }
 
 /**
@@ -44,9 +44,10 @@ export async function registerUser(email: string, password: string): Promise<Aut
  */
 export async function logout() {
     const supabase = await getClient();
-    const { error } = await supabase.auth.signOut();
-
-    return { user: null, error: toAppAuthError(error) };
+    const { data:{user}} = await supabase.auth.getUser();
+    const isAnonymous = user?.is_anonymous === true;
+    if (isAnonymous) return;
+    await supabase.auth.signOut({scope:"local"});
 }
 
 /**
@@ -56,7 +57,7 @@ export async function logout() {
 export async function getCurrentUser(): Promise<AuthData> {
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
-    return { user: await getUserFromSupabase(data.user), error: toAppAuthError(error) };
+    return { user: await getAppUserFromAuth(data.user), error: toAppAuthError(error) };
 }
 
 /**
@@ -68,12 +69,12 @@ export async function ensureAnonymousSession(): Promise<AuthData> {
         const { data, error } = await supabase.auth.getUser()
 
         if (data.user) {
-            return { user: await getUserFromSupabase(data.user), error: toAppAuthError(error) };
+            return { user: await getAppUserFromAuth(data.user), error: toAppAuthError(error) };
         }
     }
 
     const { data, error } = await supabase.auth.signInAnonymously()
-    return { user: await getUserFromSupabase(data.user), error: toAppAuthError(error) };
+    return { user: await getAppUserFromAuth(data.user), error: toAppAuthError(error) };
 }
 
 export async function isAdmin() {
@@ -98,6 +99,6 @@ export async function isAdmin() {
     return true
 }
 
-async function getUserFromSupabase(authUser: SupabaseUser|null): Promise<User|null> {
+async function getAppUserFromAuth(authUser: SupabaseUser|null): Promise<User|null> {
     return null;
 }
