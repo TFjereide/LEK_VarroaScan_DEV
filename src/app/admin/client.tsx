@@ -23,6 +23,12 @@ import {
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 
+import * as serverActions from "@/lib/auth/actions";
+
+
+import { useRouter } from 'next/navigation';
+
+
 function normalizeInternalRedirectPath(value: string | null) {
   if (!value) return null;
   if (!value.startsWith("/")) return null;
@@ -118,7 +124,7 @@ export function AdminPageClient() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [isAuthed, setIsAuthed] = useState(false);
+//   const [isAuthed, setIsAuthed] = useState(false);
   const [access, setAccess] = useState<VarroaAccess | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
@@ -177,7 +183,6 @@ export function AdminPageClient() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
-      setIsAuthed(Boolean(session));
       if (!session) {
         setAccess(null);
         setItems([]);
@@ -255,10 +260,10 @@ export function AdminPageClient() {
   }, [reload]);
 
   useEffect(() => {
-    if (!isAuthed || !access?.role || !requestedNextPath) return;
+    if (!access?.role || !requestedNextPath) return;
     if (requestedNextPath === "/admin/" || requestedNextPath === "/admin") return;
     window.location.replace(`${basePath}${requestedNextPath}`);
-  }, [access?.role, basePath, isAuthed, requestedNextPath]);
+  }, [access?.role, basePath, requestedNextPath]);
 
   const signInWithPassword = async () => {
     setAuthError(null);
@@ -523,10 +528,11 @@ export function AdminPageClient() {
     setAuthInfo("Sjekk e-posten din (og søppelpost) for en innloggingslenke.");
   };
 
+  const router = useRouter();
   const signOut = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
-    await reload();
+    await serverActions.logOut()
+    router.push("/login")
+
   };
 
   const setUserRole = async (
@@ -722,6 +728,7 @@ export function AdminPageClient() {
     },
     { key: "ARKIVERT", label: "Arkiverte", value: counts.ARKIVERT, fallback: 0 },
   ] as const;
+  
 
   return (
     <div className="min-h-dvh px-4 pb-10 pt-8">
@@ -779,355 +786,8 @@ export function AdminPageClient() {
       </header>
 
       <main className="mx-auto mt-6 w-full max-w-6xl space-y-4">
-        {!isAuthed ? (
-          <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <div className="text-2xl font-semibold text-zinc-50">
-                  {authMode === "register"
-                    ? "Registrer deg"
-                    : authMode === "forgot"
-                    ? "Glemt passord"
-                    : authMode === "recovery"
-                    ? "Sett nytt passord"
-                    : isFromBiensVokterAdmin
-                    ? "Logg inn for å åpne LEK-VarroaScan"
-                    : "Logg inn"}
-                </div>
-                <div className="mt-2 text-sm text-zinc-400">
-                  {authMode === "register"
-                    ? "Lag deg en bruker med skole-e-post og eget passord. Får du automatisk STUDENT-tilgang."
-                    : authMode === "forgot"
-                    ? "Skriv inn e-posten din for å få en lenke for å sette nytt passord."
-                    : authMode === "recovery"
-                    ? "Skriv inn et nytt passord du kan huske."
-                    : isFromBiensVokterAdmin
-                    ? "Du kommer fra LEK-Biens Vokter™️ sitt adminpanel. Autentiser deg under for å åpne arbeidsflaten i LEK-VarroaScan. Etter login holder det seg ca. 30 dager i denne nettleseren."
-                    : "Logg inn for å åpne kø, arbeidsflate og kontrollflyt."}
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2 rounded-2xl border border-zinc-800 bg-zinc-950 p-1">
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode("login"); setAuthError(null); setAuthInfo(null); }}
-                  className={[
-                    "h-10 rounded-xl px-4 text-sm font-semibold transition",
-                    authMode === "login"
-                      ? "bg-amber-400 text-zinc-950"
-                      : "text-zinc-300 hover:text-zinc-100",
-                  ].join(" ")}
-                >
-                  Logg inn
-                </button>
-                {!isFromBiensVokterAdmin ? (
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode("register"); setAuthError(null); setAuthInfo(null); setConfirmPassword(""); }}
-                    className={[
-                      "h-10 rounded-xl px-4 text-sm font-semibold transition",
-                      authMode === "register"
-                        ? "bg-amber-400 text-zinc-950"
-                        : "text-zinc-300 hover:text-zinc-100",
-                    ].join(" ")}
-                  >
-                    Registrer deg
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => { setAuthMode("forgot"); setAuthError(null); setAuthInfo(null); setPassword(""); setConfirmPassword(""); }}
-                  className={[
-                    "h-10 rounded-xl px-4 text-sm font-semibold transition",
-                    authMode === "forgot"
-                      ? "bg-amber-400 text-zinc-950"
-                      : "text-zinc-300 hover:text-zinc-100",
-                  ].join(" ")}
-                >
-                  Glemt passord?
-                </button>
-              </div>
-            </div>
-
-            {isFromBiensVokterAdmin && authMode === "login" ? (
-              <div className="mt-5 rounded-2xl border border-emerald-900/60 bg-emerald-950/30 px-4 py-4">
-                <div className="text-base font-semibold text-emerald-200">
-                  ✅ For deg som eier prosjektet
-                </div>
-                <div className="mt-2 text-sm text-emerald-100">
-                  Velg din e-post under for å fylle den ut automatisk, skriv passord, logg inn. Studenter bruker den direkte lenken til <code className="text-zinc-100">/admin</code>.
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setEmail("richard141271@gmail.com")}
-                    className="h-10 rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-4 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/60"
-                  >
-                    rikhard@gmail.com (SUPERADMIN)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmail("richard141271@icloud.com")}
-                    className="h-10 rounded-xl border border-emerald-700/60 bg-emerald-900/40 px-4 text-sm font-semibold text-emerald-100 hover:bg-emerald-900/60"
-                  >
-                    rikhard@icloud.com (FAGANSVARLIG)
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {isFromBiensVokterAdmin ? (
-              <div className="mt-4 rounded-2xl border border-amber-900/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-                👉 Etter login kommer du tilbake til det du skulle gjøre.
-                {requestedNextPath ? (
-                  <>
-                    {" "} Nåværende sti: <code className="rounded bg-zinc-900/70 px-2 py-0.5 text-amber-200">{requestedNextPath}</code>
-                  </>
-                ) : null}
-              </div>
-            ) : requestedNextPath ? (
-              <div className="mt-4 rounded-2xl border border-amber-900/50 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">
-                👉 Etter login sendes du videre til: <code className="rounded bg-zinc-900/70 px-2 py-0.5 text-amber-200">{requestedNextPath}</code>
-              </div>
-            ) : null}
-
-            <div className={[
-              "mt-5 rounded-2xl border",
-              isFromBiensVokterAdmin ? "border-zinc-800 bg-zinc-950/60" : "border-indigo-900/60 bg-indigo-950/30",
-              "px-4 py-4 text-sm",
-              isFromBiensVokterAdmin ? "text-zinc-200" : "text-indigo-200"
-            ].join(" ")}>
-              {!isFromBiensVokterAdmin ? (
-                <>
-                  <div className="font-semibold text-base">
-                    🎓 HIØ-student / fagansvarlig?
-                  </div>
-                  <div className="mt-2 text-indigo-100">
-                    {authMode === "register" ? (
-                      <>
-                        <b>Registrer deg med skole-e-post + eget passord</b> under. Får du automatisk rolle som STUDENT (eller FAGANSVARLIG hvis e-posten din er hvitelistet).
-                      </>
-                    ) : (
-                      <>
-                        Velg <b>Registrer deg</b> øverst hvis du ikke har bruker enda.
-                        Skole-e-post: <b>@hiof.no, @stud.hiof.no, @hit.no, @stud.hit.no</b> → automatisk STUDENT-tilgang
-                        til <b>31. desember 2026</b>. Annen e-post: fagansvarlig legger deg til manuelt.
-                      </>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-semibold text-base">
-                    🧑‍🎓 Studenter?
-                  </div>
-                  <div className="mt-2 text-zinc-100">
-                    Ikke bruk denne innloggingslenken for studenter. Gi dem den direkte lenken til <code className="text-zinc-50">/admin</code> i LEK-VarroaScan, der kan de <b>registrere seg med skole-e-post + eget passord</b> selv.
-                  </div>
-                </>
-              )}
-              {authMode === "register" && (
-                <div className="mt-2 text-xs text-indigo-300">
-                  Etter registrering logges du rett inn. Vær inne i arbeidsflaten umiddelbart! Ingen e-postbekreftelse trengs (utenom du skrudd på manuelt i Supabase).
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-zinc-300">
-                  E-post
-                </label>
-                <input
-                  name="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                  placeholder={
-                    authMode === "forgot"
-                      ? "e-posten din registrert tidligere"
-                      : "fornavn.etternavn@stud.hiof.no"
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    if (authMode === "login") {
-                      if (password) void signInWithPassword();
-                    } else if (authMode === "register") {
-                      void registerWithPassword();
-                    } else if (authMode === "forgot") {
-                      void resetPassword();
-                    } else if (authMode === "recovery") {
-                      void saveRecoveryPassword();
-                    }
-                  }}
-                  className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                />
-              </div>
-
-              {authMode !== "forgot" ? (
-                <div>
-                  <label className="text-xs font-semibold text-zinc-300">
-                    Passord
-                  </label>
-                  <input
-                    name={authMode === "register" || authMode === "recovery" ? "new-password" : "password"}
-                    autoComplete={authMode === "register" || authMode === "recovery" ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    type="password"
-                    placeholder={
-                      authMode === "register"
-                        ? "Minst 6 tegn"
-                        : authMode === "recovery"
-                        ? "Nytt passord (minst 6 tegn)"
-                        : "••••••••"
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (authMode === "login") void signInWithPassword();
-                        if (authMode === "register") void registerWithPassword();
-                        if (authMode === "recovery") void saveRecoveryPassword();
-                      }
-                    }}
-                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  />
-                </div>
-              ) : null}
-
-              {authMode === "register" || authMode === "recovery" ? (
-                <div>
-                  <label className="text-xs font-semibold text-zinc-300">
-                    Gjenta passord
-                  </label>
-                  <input
-                    name="confirm-password"
-                    autoComplete={authMode === "recovery" ? "new-password" : "new-password"}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    type="password"
-                    placeholder="Skriv samme passord igjen"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (authMode === "register") void registerWithPassword();
-                        if (authMode === "recovery") void saveRecoveryPassword();
-                      }
-                    }}
-                    className="mt-1 h-14 w-full rounded-2xl border border-zinc-700 bg-zinc-950 px-4 text-base text-zinc-50 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-amber-300"
-                  />
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              {authMode === "login" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={signInWithPassword}
-                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                    disabled={!isOnline || isLoading}
-                  >
-                    {isLoading ? "Logger inn…" : "🔐 Logg inn med passord"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={sendLoginLink}
-                    className="h-12 rounded-2xl border border-zinc-700 bg-zinc-950 text-sm font-semibold text-zinc-50 active:opacity-90 disabled:opacity-60 hover:bg-zinc-900"
-                    disabled={!isOnline || isLoading}
-                  >
-                    📧 Send meg en innloggingslenke på e-post (alternativ)
-                  </button>
-                </>
-              ) : null}
-
-              {authMode === "register" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={registerWithPassword}
-                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                    disabled={!isOnline || isLoading}
-                  >
-                    {isLoading ? "Oppretter bruker…" : "✨ Opprett bruker og logg inn"}
-                  </button>
-                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs text-zinc-400">
-                    ✅ Registreringen lager deg rett inn umiddelbart, venter du <b>ikke</b> på e-postbekreftelse (med mindre det er skrudd på manuelt i Supabase).
-                  </div>
-                </>
-              ) : null}
-
-              {authMode === "forgot" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={resetPassword}
-                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                    disabled={!isOnline || isLoading}
-                  >
-                    {isLoading ? "Sender…" : "📧 Send lenke for nytt passord"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode("login")}
-                    className="h-10 text-sm font-semibold text-zinc-300 hover:text-zinc-100"
-                  >
-                    ← Tilbake til innlogging
-                  </button>
-                </>
-              ) : null}
-
-              {authMode === "recovery" ? (
-                <>
-                  <div className="rounded-2xl border border-amber-900/60 bg-amber-950/30 px-4 py-4 text-sm text-amber-100">
-                    <div className="font-semibold text-base">
-                      🔑 Sett nytt passord
-                    </div>
-                    <div className="mt-2">
-                      Nettleseren din husket at du kom hit fra en lenke i
-                      e-posten. Skriv inn et nytt passord du kan huske, så
-                      lagrer vi det på brukeren din umiddelbart.
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={saveRecoveryPassword}
-                    className="h-14 rounded-2xl bg-amber-400 text-base font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60 hover:bg-amber-300"
-                    disabled={!isOnline || isLoading}
-                  >
-                    {isLoading ? "Lagrer passord…" : "💾 Lagre nytt passord og logg inn"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthMode("login");
-                      setAuthInfo(null);
-                      setAuthError(null);
-                    }}
-                    className="h-10 text-sm font-semibold text-zinc-300 hover:text-zinc-100"
-                  >
-                    ← Tilbake til innlogging
-                  </button>
-                </>
-              ) : null}
-            </div>
-
-            {authInfo ? (
-              <div className="mt-5 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
-              ✅ {authInfo}
-            </div>
-          ) : null}
-            {authError ? (
-              <div className="mt-5 rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
-                {authError}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {isAuthed && access?.role == null ? (
+    
+        {access?.role == null ? (
           <div className="rounded-3xl border border-amber-900/60 bg-amber-950/30 p-6">
             <div className="text-2xl font-semibold text-amber-100">
               🔐 Logget inn, men mangler tilgang
