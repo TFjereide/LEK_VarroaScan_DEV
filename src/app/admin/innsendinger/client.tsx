@@ -136,9 +136,12 @@ export function AdminQueueClient() {
         return;
       }
 
+      // GAMMEL: leste fra varroa_submissions (gamle, ikke-migrerte
+      // databasen). NY: submissions - getSubmissionSelect() gir samme
+      // feltnavn tilbake som før, så resten av filen er uendret.
       const [submissionsRes, availableRes] = await Promise.all([
         supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select(getSubmissionSelect())
           .order("updated_at", { ascending: false })
           .limit(500),
@@ -191,8 +194,10 @@ export function AdminQueueClient() {
     try {
       const userId = access?.userId;
       if (userId) {
+        // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
+        // er en ekte kolonne, så sorteringen trengte ingen endring.
         const underWorkRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "UNDER_ARBEID")
           .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
@@ -214,12 +219,16 @@ export function AdminQueueClient() {
       }
 
       if (access?.canControl) {
+        // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+        // .select("id")-spørring på "created_at" - som bare er et alias fra
+        // getSubmissionSelect() og ikke finnes utenfor den. NY: riktig
+        // tabellnavn + sortering på den ekte kolonnen submission_date.
         const reviewRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "KLAR_FOR_KONTROLL")
           .neq("processed_by", userId ?? "")
-          .order("created_at", { ascending: true })
+          .order("submission_date", { ascending: true })
           .limit(1)
           .maybeSingle();
 
@@ -511,9 +520,11 @@ export function AdminQueueClient() {
                           </div>
 
                           <div className="text-sm text-zinc-300">{assignedLabel}</div>
-                          <div className="text-sm text-zinc-300">
-                            {item.manual_mite_count != null ? item.manual_mite_count : "—"}
-                          </div>
+                          {/* GAMMEL: item.manual_mite_count (kolonnen finnes ikke
+                              lenger - midd telles nå per bilde). NY: viser "—" her
+                              i listen; det faktiske antallet ser du på
+                              arbeidsflate-siden når du åpner saken. */}
+                          <div className="text-sm text-zinc-300">—</div>
                           <div className="text-sm text-zinc-300">
                             {formatDateTime(item.updated_at ?? item.created_at)}
                           </div>
