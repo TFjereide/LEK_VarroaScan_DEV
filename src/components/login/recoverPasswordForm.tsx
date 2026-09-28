@@ -1,6 +1,7 @@
 'use client';
-import { SubmitEvent } from "react";
-import { registerUser } from '@/lib/auth/actions';
+import { SubmitEvent, useEffect, useState } from "react";
+import { getClient } from "@/lib/auth/client";
+import { updatePassword } from "@/lib/auth/actions";
 
 
 interface RecoverPasswordFormProps {
@@ -9,9 +10,42 @@ interface RecoverPasswordFormProps {
 
 export function RecoverPasswordForm(props: RecoverPasswordFormProps) {
 
-    const onRecovery = (event: SubmitEvent<HTMLFormElement>) => { }
+    const [canPasswordRecovery, setCanPasswordRecovery] = useState<boolean>(false);
+    useEffect( () => {
+        const supabase = getClient();
+        const {data:{subscription}} = supabase.auth.onAuthStateChange((event) => {
+            if (event === "PASSWORD_RECOVERY") {
+                setCanPasswordRecovery(true);
+            }
+        });
 
-    return (
+
+        return () => subscription.unsubscribe();
+
+     }, []);
+
+    const onRecovery = async (event: SubmitEvent<HTMLFormElement>) =>{
+        event.preventDefault();
+
+        const formdata = new FormData(event.currentTarget);
+        const password = formdata.get("password");
+        const passwordConfirm = formdata.get("confirm-password");
+
+        if (typeof (password) !== "string" || typeof (passwordConfirm) !== "string") {
+            props.setMsg("Du må skrive inn i begge felter.")
+            return;
+        }
+
+        if (password !==passwordConfirm) {
+            props.setMsg("Passordene må være like.")
+            return;
+        }
+
+        const {error} = await updatePassword(password);
+
+    }
+
+    return canPasswordRecovery ?(
         <form onSubmit={onRecovery} className="mt-6 grid grid-cols-1 gap-4">
             <div>
                 <div className="rounded-2xl border border-amber-900/60 bg-amber-950/30 px-4 py-4 text-sm text-amber-100">
@@ -72,5 +106,5 @@ export function RecoverPasswordForm(props: RecoverPasswordFormProps) {
                 </button>
             </div>
         </form>
-    )
+    ) : <div>Laster....</div>;
 }

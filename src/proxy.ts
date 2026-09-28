@@ -1,29 +1,28 @@
 import { NextRequest } from "next/server";
-import {NextResponse } from "next/server";
-import { getClient } from "@/lib/auth/server";
+import { NextResponse } from "next/server";
+import { ensureAnonymousSession, isAdmin } from "@/lib/auth/actions";
 // import { cookies } from 'next/headers';
 
-// TODO: replace this
-function isAdmin(id:string){return false;}
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
-  
-  const supabase = await getClient();
-  const {data} = await supabase.auth.getClaims();
-  const user = data?.claims;
+
+  const {error } = await ensureAnonymousSession();
+  if (error) {
+    return new NextResponse("403: Not authorized", { status: 403 });
+  }
 
   if (request.nextUrl.pathname.startsWith('/admin')) {
-    if (!user || !(await isAdmin(user.id))) {
+    if (!(await isAdmin())) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
   }
- 
+
   return supabaseResponse;
 }
 
-// export const config = {
-//   matcher: '/admin/:path*',
-// }
+export const config = {
+  matcher: '/admin/:path*',
+}

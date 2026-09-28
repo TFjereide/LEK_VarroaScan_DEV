@@ -1,4 +1,7 @@
 
+/**
+ * in-app user datatype
+ */
 export type User = {
     user_id: string;
     email: string | null;

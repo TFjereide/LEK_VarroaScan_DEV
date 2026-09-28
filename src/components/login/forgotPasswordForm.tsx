@@ -1,6 +1,6 @@
 'use client';
 import { SubmitEvent } from "react";
-import { registerUser } from '@/lib/auth/actions';
+import { sendRecoveryEmail } from '@/lib/auth/actions';
 
 
 interface ForgotPasswordFormProps {
@@ -9,7 +9,17 @@ interface ForgotPasswordFormProps {
 
 export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
 
-    const onForgot = (event: SubmitEvent<HTMLFormElement>) => { }
+    const onForgot = (event: SubmitEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const formdata = new FormData(event.currentTarget);
+        const email = formdata.get("email");
+        if (typeof (email) !== "string") {
+            props.setMsg("Du må skrive inn en epost.")
+            return;
+        }
+        sendRecoveryEmail(email);
+     }
 
     return (
         <form onSubmit={onForgot} className="mt-6 grid grid-cols-1 gap-4">
