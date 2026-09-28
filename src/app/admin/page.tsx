@@ -202,9 +202,13 @@ export default function AdminInboxPage() {
         return;
       }
 
+      // GAMMEL: leste fra varroa_submissions (den gamle, ikke-migrerte
+      // databasen). NY: submissions - getSubmissionSelect() gir samme
+      // feltnavn tilbake som før (se lib/varroaWorkflow.ts), så resten
+      // av denne filen trenger ikke endres.
       const [submissionsRes, availableRes] = await Promise.all([
         supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select(getSubmissionSelect())
           .order("updated_at", { ascending: false })
           .limit(300),
@@ -341,8 +345,8 @@ export default function AdminInboxPage() {
     });
 
     if (!res.error && res.data.session) {
-      // ✅ signUp ga oss session (OK) – men VERIFISER at passordet faktisk
-      //    fungerer for senere innlogging, for dette har vært en bug i Supabase.
+      // signUp ga oss session (OK) – men VERIFISER at passordet faktisk
+      // fungerer for senere innlogging, for dette har vært en bug i Supabase.
       const verify = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
         password,
@@ -575,8 +579,10 @@ export default function AdminInboxPage() {
     try {
       const userId = access?.userId;
       if (userId) {
+        // GAMMEL: varroa_submissions. NY: submissions. "updated_at" er en
+        // ekte kolonne (ikke et alias), så sorteringen trenger ingen endring.
         const underWorkRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "UNDER_ARBEID")
           .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
@@ -598,12 +604,16 @@ export default function AdminInboxPage() {
       }
 
       if (access?.canControl) {
+        // GAMMEL: sorterte på "created_at" - den kolonnen heter nå
+        // submission_date i submissions-tabellen (created_at var kun et
+        // alias inni getSubmissionSelect(), og gjelder ikke her siden vi
+        // bare henter "id"). NY: sorter på det ekte kolonnenavnet.
         const reviewRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "KLAR_FOR_KONTROLL")
           .neq("processed_by", userId ?? "")
-          .order("created_at", { ascending: true })
+          .order("submission_date", { ascending: true })
           .limit(1)
           .maybeSingle();
 
@@ -1408,11 +1418,14 @@ export default function AdminInboxPage() {
                               {ui.label}
                             </div>
                           </div>
+                          {/* GAMMEL: viste item.manual_mite_count her - den kolonnen
+                              lå på innsendingen som helhet. NY: midd-antall er nå et
+                              per-bilde-tall (images.mite_count / vurderinger på
+                              arbeidsflate-siden), ikke ett tall for hele innsendingen,
+                              så vi viser bare treningsstatus her. Se arbeidsflaten
+                              (client.tsx) for faktiske midd-tall per bilde. */}
                           <div className="mt-1 text-xs text-zinc-500">
-                            {item.training_ready ? "Treningsklar" : "Ikke treningsklar"}{" "}
-                            {item.manual_mite_count != null
-                              ? `• ${item.manual_mite_count} midd`
-                              : ""}
+                            {item.training_ready ? "Treningsklar" : "Ikke treningsklar"}
                           </div>
                         </a>
                       );
