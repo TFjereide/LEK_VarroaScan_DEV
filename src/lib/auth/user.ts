@@ -12,3 +12,14 @@ export type User = {
     expires_at: string | null;
     banned_at: string | null;
 }
+
+export const TestUser = {
+    user_id: "default",
+    email: "default",
+    created_at: "default",
+    last_sign_in_at: "default",
+    role: "default",
+    role_created_at: "default",
+    expires_at: "default",
+    banned_at: "default",
+}

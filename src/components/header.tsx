@@ -1,7 +1,10 @@
-"use client";
+// "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAppVersion } from "@/lib/appVersion";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import { getCurrentUser } from "@/lib/auth/actions";
+import { AppAuthError } from "@/lib/auth/appAuthError";
+import { useAuth } from "@/app/auth-provider";
 
 
 
@@ -14,7 +17,7 @@ type CommonHeaderProps = {
 export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const appVersion = useMemo(() => getAppVersion(), []);
+    const appVersion = getAppVersion()
 
     const onBack = () => {
         if (url) return;
@@ -23,6 +26,8 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
             return;
         }
     };
+    
+    const {user, isAdmin} = useAuth();
 
     return (
     <header className="mx-auto w-full max-w-xl">
@@ -54,12 +59,23 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
               <div className="text-xs text-zinc-400">v{appVersion}</div>
             </div>
           </div>
+          
+          {user === null ?
+          <a
+            href={`${basePath}/login`}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
+          >
+            logg inn
+          </a>
+          :null}
+          {isAdmin ?
           <a
             href={`${basePath}/admin/`}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
           >
             🎓 Admin
           </a>
+          :null}
         </div>
 
         {!isOnline ? (

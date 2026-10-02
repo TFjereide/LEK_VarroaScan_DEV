@@ -1,7 +1,7 @@
 'use server';
 import { type User as SupabaseUser } from '@supabase/auth-js';
 import { getClient } from "@/lib/auth/server";
-import { type User } from "@/lib/auth/user";
+import { TestUser, type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
 import { redirect } from "next/navigation";
 
@@ -60,6 +60,10 @@ export async function logOut() {
  * Uses getUser() to validate the JWT token against the server.
  */
 export async function getCurrentUser(): Promise<AuthData> {
+    if (process.env.ACCESS_MODE_DEBUG==="true") {
+        return {user:TestUser, error:AppAuthError.Ok} ;
+}
+
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
     if (error) return { user: null, error: toAppAuthError(error) };
@@ -104,7 +108,9 @@ export async function updatePassword(password: string): Promise<AuthData>  {
 }
 
 
-export async function isAdmin() {
+export async function isAdmin() : Promise<boolean>{
+    if (process.env.ACCESS_MODE_DEBUG==="true") return true ;
+
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
 
