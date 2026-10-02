@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AppRole } from "./auth/roles";
 
 export const VARROA_STATUSES = [
   "NY",
@@ -10,7 +11,6 @@ export const VARROA_STATUSES = [
 ] as const;
 
 export type VarroaSubmissionStatus = (typeof VARROA_STATUSES)[number];
-export type VarroaRole = "SUPERADMIN" | "FAGANSVARLIG" | "STUDENT";
 
 // GAMMEL: VarroaSubmissionRecord pekte på varroa_submissions (gammel
 // databasen) og hadde flere felt som enten ike finnes i den nye
@@ -170,7 +170,7 @@ export function getStatusUi(status: string) {
   }
 }
 
-export function getRoleLabel(role: VarroaRole | null) {
+export function getRoleLabel(role: AppRole | null) {
   switch (role) {
     case "SUPERADMIN":
       return "Superadmin";

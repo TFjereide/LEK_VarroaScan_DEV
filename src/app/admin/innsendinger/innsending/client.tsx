@@ -10,7 +10,7 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getVarroaAccess, type VarroaAccess } from "@/lib/auth/varroaRoles";
+import { getAppAccess, type RoleAuthorization } from "@/lib/auth/AppRoles";
 import {
   createSignedImages,
   formatWorkerLabel,
@@ -929,7 +929,7 @@ export function ProductionSubmissionClient() {
   }, [basePath]);
 
   const [isAuthed, setIsAuthed] = useState(false);
-  const [access, setAccess] = useState<VarroaAccess | null>(null);
+  const [access, setAccess] = useState<RoleAuthorization | null>(null);
   const [item, setItem] = useState<VarroaSubmissionRecord | null>(null);
   const [images, setImages] = useState<SignedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -972,7 +972,7 @@ export function ProductionSubmissionClient() {
         return;
       }
 
-      const nextAccess = await getVarroaAccess(supabase, session);
+      const nextAccess = await getAppAccess(supabase, session);
       setAccess(nextAccess);
       if (!nextAccess.role) {
         setItem(null);

@@ -8,7 +8,7 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getVarroaAccess, type VarroaAccess } from "@/lib/auth/varroaRoles";
+import { getAppAccess, type RoleAuthorization, type AppRole } from "@/lib/auth/roles";
 import { User } from "@/lib/auth/user";
 import {
   formatWorkerLabel,
@@ -28,6 +28,7 @@ import * as serverActions from "@/lib/auth/actions";
 
 
 import { useRouter } from 'next/navigation';
+import { useAuth } from "../auth-provider";
 
 
 function normalizeInternalRedirectPath(value: string | null) {
@@ -41,6 +42,9 @@ function normalizeInternalRedirectPath(value: string | null) {
 export function AdminPageClient() {
   const isOnline = useOnlineStatus();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+  const {user, isAdmin} = useAuth();
+
   const adminContextSearch = useMemo(() => {
     if (typeof window === "undefined") return "";
     return getAdminContextSearch(window.location.search);
@@ -126,7 +130,7 @@ export function AdminPageClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
 //   const [isAuthed, setIsAuthed] = useState(false);
-  const [access, setAccess] = useState<VarroaAccess | null>(null);
+  const [access, setAccess] = useState<RoleAuthorization | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -173,17 +177,18 @@ export function AdminPageClient() {
     setIsLoading(true);
     try {
       // TODO: Cleanup this mess.... so much that's not needed.
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-      if (!session) {
+      // const { data: sessionData } = await supabase.auth.getSession();
+      // const session = sessionData.session;
+      if (!user) {
         setAccess(null);
         setItems([]);
         setAvailableNewCount(0);
         return;
       }
 
-      const nextAccess = await getVarroaAccess(supabase, session);
+      const nextAccess = await getAppAccess(user);
       setAccess(nextAccess);
+
       if (nextAccess.canManageSystem) void loadUsers();
       else setUsers([]);
       if (!nextAccess.role) {
@@ -526,7 +531,7 @@ export function AdminPageClient() {
   const setUserRole = async (
     targetUserId: string,
     opts: {
-      role?: "STUDENT" | "FAGANSVARLIG" | null;
+      role?: AppRole | null;
       banned?: boolean;
       expiresAt?: string | null;
     },
