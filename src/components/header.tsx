@@ -1,12 +1,7 @@
 // "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { getAppVersion } from "@/lib/appVersion";
-import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getCurrentUser } from "@/lib/auth/actions";
-import { AppAuthError } from "@/lib/auth/appAuthError";
 import { useAuth } from "@/app/auth-provider";
-
-
+import { logOut } from "@/lib/auth/actions";
 
 type CommonHeaderProps = {
   url: string | null;
@@ -26,6 +21,10 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
             return;
         }
     };
+
+    const onLogOut = () =>{
+      logOut();
+    }
     
     const {user, isAdmin} = useAuth();
 
@@ -67,7 +66,12 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
           >
             logg inn
           </a>
-          :null}
+          :<button
+            onClick={()=>onLogOut()}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
+          >
+            logg ut
+          </button>}
           {isAdmin ?
           <a
             href={`${basePath}/admin/`}

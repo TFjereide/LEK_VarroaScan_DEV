@@ -78,11 +78,10 @@ export function normalizeSource(value: string | null) {
   return v;
 }
 
-export function normalizeType(value: string | null): SubmissionType | null {
+export function normalizeType(value: string | null): SubmissionType {
   const v = (value ?? "").trim().toLowerCase();
-  if (v === "bunnbrett" || v === "bunnbrett_foto") return "BUNNBRETT_FOTO";
   if (v === "kontroll" || v === "kontrollfoto") return "KONTROLLFOTO";
-  return null;
+  return "BUNNBRETT_FOTO";
 }
 
 export function normalizeReturnUrl(value: string | null) {

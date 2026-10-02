@@ -9,7 +9,7 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getVarroaAccess, type VarroaAccess } from "@/lib/varroaRoles";
+import { getVarroaAccess, type VarroaAccess } from "@/lib/auth/varroaRoles";
 import {
   formatWorkerLabel,
   formatDateTime,

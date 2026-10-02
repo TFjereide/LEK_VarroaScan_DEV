@@ -8,7 +8,8 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getVarroaAccess, type VarroaAccess } from "@/lib/varroaRoles";
+import { getVarroaAccess, type VarroaAccess } from "@/lib/auth/varroaRoles";
+import { User } from "@/lib/auth/user";
 import {
   formatWorkerLabel,
   formatDateTime,
@@ -130,17 +131,7 @@ export function AdminPageClient() {
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  type VarroaUserRecord = {
-    user_id: string;
-    email: string | null;
-    created_at: string;
-    last_sign_in_at: string | null;
-    role: string | null;
-    role_created_at: string | null;
-    expires_at: string | null;
-    banned_at: string | null;
-  };
-  const [users, setUsers] = useState<VarroaUserRecord[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [usersLoading, setUsersLoading] = useState(false);
 
@@ -151,7 +142,7 @@ export function AdminPageClient() {
     try {
       const res = await supabase.rpc("varroa_list_users");
       if (res.error) throw res.error;
-      setUsers((res.data ?? []) as unknown as VarroaUserRecord[]);
+      setUsers((res.data ?? []) as unknown as User[]);
     } catch (e) {
       const msg =
         typeof e === "object" && e && "message" in e
@@ -181,6 +172,7 @@ export function AdminPageClient() {
 
     setIsLoading(true);
     try {
+      // TODO: Cleanup this mess.... so much that's not needed.
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
       if (!session) {
@@ -207,10 +199,7 @@ export function AdminPageClient() {
         return;
       }
 
-      // GAMMEL: leste fra varroa_submissions (den gamle, ikke-migrerte
-      // databasen). NY: submissions - getSubmissionSelect() gir samme
-      // feltnavn tilbake som før (se lib/varroaWorkflow.ts), så resten
-      // av denne filen trenger ikke endres.
+      // TODO: Move to varroaScanDb.ts
       const [submissionsRes, availableRes] = await Promise.all([
         supabase
           .from("submissions")
@@ -532,7 +521,6 @@ export function AdminPageClient() {
   const signOut = async () => {
     await serverActions.logOut()
     router.push("/login")
-
   };
 
   const setUserRole = async (
