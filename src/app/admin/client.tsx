@@ -100,18 +100,18 @@ export function AdminPageClient() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [authMode, setAuthMode] = useState<
-    | "login"
-    | "register"
-    | "forgot"
-    | "recovery"
-  >(() => {
-    if (typeof window === "undefined") return "login";
-    const hash = window.location.hash.replace(/^#/, "");
-    if (!hash) return "login";
-    const params = new URLSearchParams(hash);
-    return params.get("type") === "recovery" ? "recovery" : "login";
-  });
+  // const [authMode, setAuthMode] = useState<
+  //   | "login"
+  //   | "register"
+  //   | "forgot"
+  //   | "recovery"
+  // >(() => {
+  //   if (typeof window === "undefined") return "login";
+  //   const hash = window.location.hash.replace(/^#/, "");
+  //   if (!hash) return "login";
+  //   const params = new URLSearchParams(hash);
+  //   return params.get("type") === "recovery" ? "recovery" : "login";
+  // });
   const [authInfo, setAuthInfo] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
     const hash = window.location.hash.replace(/^#/, "");
