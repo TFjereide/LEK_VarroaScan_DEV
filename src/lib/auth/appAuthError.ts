@@ -5,46 +5,50 @@ import { AuthError, type User } from '@supabase/auth-js';
 Application Auth errors, for UX reasons.
 The native supabase AuthError is big and unwieldy, so it's better to define our own.
 */ 
-export enum AppAuthError {
-    Ok,
-    Unknown,
+export const AppAuthError = {
+    Ok: "ok",
+    Unknown: "unknown",
 
-    // Account / identity
-    AlreadyExists,
-    NotFound,
-    InvalidCredentials,
-    EmailNotConfirmed,
-    PhoneNotConfirmed,
-  
-    OtpExpired,
-    InvalidInput,
-    WeakPassword,
-    SamePassword,
-    SessionExpired,
-    ReauthenticationRequired,
-    ReauthenticationFailed,
-    ProviderDisabled,
-    ProviderVerificationRequired,
-    IdentityError,
-    MfaRequired,
-    MfaFailed,
-    MfaExpired,
-    MfaConfigurationError,
-    RateLimited,
-    Unauthorized,
-    Forbidden,
-    ConfigurationError,
-    TemporaryFailure,
-    ServerError,
-}
+    AlreadyExists: "already_exists",
+    NotFound: "not_found",
+    InvalidCredentials: "invalid_credentials",
+    EmailNotConfirmed: "email_not_confirmed",
+    PhoneNotConfirmed: "phone_not_confirmed",
+
+    OtpExpired: "otp_expired",
+    InvalidInput: "invalid_input",
+    WeakPassword: "weak_password",
+    SamePassword: "same_password",
+    SessionExpired: "session_expired",
+    ReauthenticationRequired: "reauthentication_required",
+    ReauthenticationFailed: "reauthentication_failed",
+    ProviderDisabled: "provider_disabled",
+    ProviderVerificationRequired: "provider_verification_required",
+    IdentityError: "identity_error",
+    MfaRequired: "mfa_required",
+    MfaFailed: "mfa_failed",
+    MfaExpired: "mfa_expired",
+    MfaConfigurationError: "mfa_configuration_error",
+    RateLimited: "rate_limited",
+    Unauthorized: "unauthorized",
+    Forbidden: "forbidden",
+    ConfigurationError: "configuration_error",
+    TemporaryFailure: "temporary_failure",
+    ServerError: "server_error",
+} as const;
+
+export type AppAuthError =
+    (typeof AppAuthError)[keyof typeof AppAuthError];
+
 
 /* 
 Condenses the "native" AuthError type into an application AuthErrorType
 */
 export function toAppAuthError(error: AuthError|null): AppAuthError {
-    if (!error){
-        return AppAuthError.Ok;   
-    }
+  if (!error){
+      return AppAuthError.Ok;   
+  }
+  console.error(error.message);
   switch (error.code) {
     // Account already exists
     case 'email_exists':

@@ -21,7 +21,7 @@ type VarroaUserRecord = {
 
 export default function RecoveryPage() {
     const isOnline = useOnlineStatus();
-    const [friendlyMsg, setFriendlyMsg] = useState<String | null>(null);
+    const [friendlyMsg, setFriendlyMsg] = useState<string | null>(null);
 
     return (
         <div className="min-h-dvh px-4 pb-10 pt-8">

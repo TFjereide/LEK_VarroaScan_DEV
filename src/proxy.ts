@@ -1,16 +1,18 @@
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { ensureAnonymousSession, isAdmin } from "@/lib/auth/actions";
+import { AppAuthError } from "./lib/auth/appAuthError";
 // import { cookies } from 'next/headers';
 
 
 export async function proxy(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
+  const supabaseResponse = NextResponse.next({
     request,
   })
 
   const {error } = await ensureAnonymousSession();
-  if (error) {
+  if (error !== AppAuthError.Ok) {
+    console.error(error)
     return new NextResponse("403: Not authorized", { status: 403 });
   }
 

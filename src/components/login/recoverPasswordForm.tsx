@@ -5,7 +5,7 @@ import { updatePassword } from "@/lib/auth/actions";
 
 
 interface RecoverPasswordFormProps {
-    setMsg: (msg: String) => void,
+    setMsg: (msg: string) => void,
 }
 
 export function RecoverPasswordForm(props: RecoverPasswordFormProps) {
@@ -37,8 +37,7 @@ export function RecoverPasswordForm(props: RecoverPasswordFormProps) {
         }
 
         if (password !==passwordConfirm) {
-            props.setMsg("Passordene må være like.")
-            return;
+          return;
         }
 
         const {error} = await updatePassword(password);
