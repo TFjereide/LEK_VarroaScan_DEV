@@ -9,7 +9,7 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getAppAccess, type RoleAuthorization } from "@/lib/auth/roles";
+import { getAuthorizedUserActions, type AuthorizedUserActions } from "@/lib/auth/roles";
 import {
   formatWorkerLabel,
   formatDateTime,
@@ -54,7 +54,7 @@ export function AdminQueueClient() {
   }, [basePath]);
 
   const [isAuthed, setIsAuthed] = useState(false);
-  const [access, setAccess] = useState<RoleAuthorization | null>(null);
+  const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -127,7 +127,7 @@ export function AdminQueueClient() {
         return;
       }
 
-      const nextAccess = await getAppAccess(supabase, session);
+      const nextAccess = await getAuthorizedUserActions(supabase, session);
       setAccess(nextAccess);
       if (!nextAccess.role) {
         setItems([]);

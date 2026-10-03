@@ -15,12 +15,23 @@ export type User = {
 }
 
 export const TestUser : User= {
-    user_id: "default",
-    email: "default",
+    user_id: "tester",
+    email: "test@test.com",
     created_at: "default",
     last_sign_in_at: "default",
     role: "SUPERADMIN",
     role_created_at: "default",
     expires_at: "default",
     banned_at: "default",
+}
+
+export const NullUser : User= {
+    user_id: "",
+    email: "",
+    created_at: "",
+    last_sign_in_at: "",
+    role: "NONE",
+    role_created_at: "",
+    expires_at: "",
+    banned_at: "",
 }

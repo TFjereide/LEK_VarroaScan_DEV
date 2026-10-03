@@ -8,7 +8,7 @@ import {
 } from "@/lib/adminNavigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getAppAccess, type RoleAuthorization, type AppRole } from "@/lib/auth/roles";
+import { getAuthorizedUserActions, type AuthorizedUserActions, type AppRole } from "@/lib/auth/roles";
 import { User } from "@/lib/auth/user";
 import {
   formatWorkerLabel,
@@ -130,7 +130,7 @@ export function AdminPageClient() {
   const [loadError, setLoadError] = useState<string | null>(null);
 
 //   const [isAuthed, setIsAuthed] = useState(false);
-  const [access, setAccess] = useState<RoleAuthorization | null>(null);
+  const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -186,11 +186,12 @@ export function AdminPageClient() {
         return;
       }
 
-      const nextAccess = await getAppAccess(user);
+      const nextAccess = await getAuthorizedUserActions(user);
       setAccess(nextAccess);
 
       if (nextAccess.canManageSystem) void loadUsers();
       else setUsers([]);
+      
       if (!nextAccess.role) {
         setItems([]);
         setAvailableNewCount(0);
