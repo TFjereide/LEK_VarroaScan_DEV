@@ -780,7 +780,7 @@ export function AdminPageClient() {
 
       <main className="mx-auto mt-6 w-full max-w-6xl space-y-4">
     
-        {user?.role == null ? (
+        {user.role === "NONE" ? (
           <div className="rounded-3xl border border-amber-900/60 bg-amber-950/30 p-6">
             <div className="text-2xl font-semibold text-amber-100">
               🔐 Logget inn, men mangler tilgang
