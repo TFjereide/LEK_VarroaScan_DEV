@@ -35,6 +35,7 @@ export function AdminQueueClient() {
     if (typeof window === "undefined") return "";
     return getAdminContextSearch(window.location.search);
   }, []);
+  
   const returnInfo = useMemo(() => {
     if (typeof window === "undefined") {
       return { href: null as string | null, label: null as string | null };
@@ -43,6 +44,7 @@ export function AdminQueueClient() {
     if (raw.href) return raw;
     return { href: null as string | null, label: null as string | null };
   }, []);
+
   const adminLoginHref = useMemo(() => {
     if (typeof window === "undefined") return `${basePath}/admin/`;
     const params = new URLSearchParams(window.location.search);

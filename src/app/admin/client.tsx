@@ -29,6 +29,9 @@ import * as serverActions from "@/lib/auth/actions";
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";
+import { ManageUserSection } from "@/components/manageUsers/manageUsers";
+import { fetchSubmissions } from "@/lib/varroaScanDb";
+import { getClient } from "@/lib/auth/client";
 
 
 function normalizeInternalRedirectPath(value: string | null) {
@@ -101,10 +104,10 @@ export function AdminPageClient() {
     window.location.replace(base);
   }, [basePath, preservedContextForLogin]);
 
-  const supabase = useMemo(() => getSupabaseClient(), []);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // const supabase = useMemo(() => getSupabaseClient(), []);
+  // const [email, setEmail] = useState("");
+  // const [password, setPassword] = useState("");
+  // const [confirmPassword, setConfirmPassword] = useState("");
   // const [authMode, setAuthMode] = useState<
   //   | "login"
   //   | "register"
@@ -117,46 +120,50 @@ export function AdminPageClient() {
   //   const params = new URLSearchParams(hash);
   //   return params.get("type") === "recovery" ? "recovery" : "login";
   // });
-  const [authInfo, setAuthInfo] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    const hash = window.location.hash.replace(/^#/, "");
-    if (!hash) return null;
-    const params = new URLSearchParams(hash);
-    return params.get("type") === "recovery"
-      ? "Du kom fra en lenke for å tilbakestille passord. Skriv inn et nytt passord under, så lagrer vi det."
-      : null;
-  });
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  // const [authInfo, setAuthInfo] = useState<string | null>(() => {
+  //   if (typeof window === "undefined") return null;
+  //   const hash = window.location.hash.replace(/^#/, "");
+  //   if (!hash) return null;
+  //   const params = new URLSearchParams(hash);
+  //   return params.get("type") === "recovery"
+  //     ? "Du kom fra en lenke for å tilbakestille passord. Skriv inn et nytt passord under, så lagrer vi det."
+  //     : null;
+  // });
+  // const [authError, setAuthError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-//   const [isAuthed, setIsAuthed] = useState(false);
+  // const [isAuthed, setIsAuthed] = useState(false);
+
+
+  // TODO: (TGF) move access into context. It's used a lot.
   const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [users, setUsers] = useState<User[]>([]);
-  const [usersError, setUsersError] = useState<string | null>(null);
-  const [usersLoading, setUsersLoading] = useState(false);
+  // const [users, setUsers] = useState<User[]>([]);
+  // const [usersError, setUsersError] = useState<string | null>(null);
+  // const [usersLoading, setUsersLoading] = useState(false);
 
-  const loadUsers = useCallback(async () => {
-    if (!supabase || !access?.canManageSystem) return;
-    setUsersError(null);
-    setUsersLoading(true);
-    try {
-      const res = await supabase.rpc("varroa_list_users");
-      if (res.error) throw res.error;
-      setUsers((res.data ?? []) as unknown as User[]);
-    } catch (e) {
-      const msg =
-        typeof e === "object" && e && "message" in e
-          ? String((e as { message?: unknown }).message)
-          : "Ukjent feil";
-      setUsersError(msg);
-    } finally {
-      setUsersLoading(false);
-    }
-  }, [access?.canManageSystem, supabase]);
+  // const loadUsers = useCallback(async () => {
+  //   if (!supabase || !access?.canManageSystem) return;
+  //   setUsersError(null);
+  //   setUsersLoading(true);
+  //   try {
+  //     const res = await supabase.rpc("varroa_list_users");
+  //     if (res.error) throw res.error;
+  //     setUsers((res.data ?? []) as unknown as User[]);
+  //   } catch (e) {
+  //     const msg =
+  //       typeof e === "object" && e && "message" in e
+  //         ? String((e as { message?: unknown }).message)
+  //         : "Ukjent feil";
+  //     setUsersError(msg);
+  //   } finally {
+  //     setUsersLoading(false);
+  //   }
+  // }, [access?.canManageSystem, supabase]);
 
   const isFromBiensVokterAdmin = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -166,14 +173,7 @@ export function AdminPageClient() {
   }, []);
 
   const reload = useCallback(async () => {
-    setAuthError(null);
     setLoadError(null);
-
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
-
     setIsLoading(true);
     try {
       // TODO: Cleanup this mess.... so much that's not needed.
@@ -189,9 +189,6 @@ export function AdminPageClient() {
       const nextAccess = await getAuthorizedUserActions(user);
       setAccess(nextAccess);
 
-      if (nextAccess.canManageSystem) void loadUsers();
-      else setUsers([]);
-      
       if (!nextAccess.role) {
         setItems([]);
         setAvailableNewCount(0);
@@ -205,7 +202,10 @@ export function AdminPageClient() {
         return;
       }
 
-      // TODO: Move to varroaScanDb.ts
+      // const [submissionsRes, availableRes] = await fetchSubmissions(getClient());
+      
+      // TODO: use database functions!
+      const supabase = await getClient();
       const [submissionsRes, availableRes] = await Promise.all([
         supabase
           .from("submissions")
@@ -245,7 +245,7 @@ export function AdminPageClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [goAfterLogin, loadUsers, requestedNextPath, supabase]);
+  }, [user, goAfterLogin, requestedNextPath]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -260,268 +260,268 @@ export function AdminPageClient() {
     window.location.replace(`${basePath}${requestedNextPath}`);
   }, [access?.role, basePath, requestedNextPath]);
 
-  const signInWithPassword = async () => {
-    setAuthError(null);
-    setAuthInfo(null);
+  // const signInWithPassword = async () => {
+  //   setAuthError(null);
+  //   setAuthInfo(null);
 
-    if (!isOnline) {
-      setAuthError("Du er offline. Innlogging krever nett.");
-      return;
-    }
+  //   if (!isOnline) {
+  //     setAuthError("Du er offline. Innlogging krever nett.");
+  //     return;
+  //   }
 
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+  //   if (!supabase) {
+  //     setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+  //     return;
+  //   }
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      setAuthError("Skriv inn e-post.");
-      return;
-    }
+  //   const trimmedEmail = email.trim().toLowerCase();
+  //   if (!trimmedEmail) {
+  //     setAuthError("Skriv inn e-post.");
+  //     return;
+  //   }
 
-    if (!password) {
-      setAuthError("Skriv inn passord.");
-      return;
-    }
+  //   if (!password) {
+  //     setAuthError("Skriv inn passord.");
+  //     return;
+  //   }
 
-    setIsLoading(true);
-    const res = await supabase.auth.signInWithPassword({
-      email: trimmedEmail,
-      password,
-    });
-    setIsLoading(false);
+  //   setIsLoading(true);
+  //   const res = await supabase.auth.signInWithPassword({
+  //     email: trimmedEmail,
+  //     password,
+  //   });
+  //   setIsLoading(false);
 
-    if (res.error) {
-      if (res.error.message?.toLowerCase()?.includes("invalid") || res.error.message?.toLowerCase()?.includes("password")) {
-        setAuthError(`${res.error.message} — hvis du ikke har bruker enda, bytt til "Registrer deg" øverst.`);
-      } else {
-        setAuthError(res.error.message);
-      }
-      return;
-    }
+  //   if (res.error) {
+  //     if (res.error.message?.toLowerCase()?.includes("invalid") || res.error.message?.toLowerCase()?.includes("password")) {
+  //       setAuthError(`${res.error.message} — hvis du ikke har bruker enda, bytt til "Registrer deg" øverst.`);
+  //     } else {
+  //       setAuthError(res.error.message);
+  //     }
+  //     return;
+  //   }
 
-    void goAfterLogin();
-  };
+  //   void goAfterLogin();
+  // };
 
-  const registerWithPassword = async () => {
-    setAuthError(null);
-    setAuthInfo(null);
+  // const registerWithPassword = async () => {
+  //   setAuthError(null);
+  //   setAuthInfo(null);
 
-    if (!isOnline) {
-      setAuthError("Du er offline. Registrering krever nett.");
-      return;
-    }
+  //   if (!isOnline) {
+  //     setAuthError("Du er offline. Registrering krever nett.");
+  //     return;
+  //   }
 
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+  //   if (!supabase) {
+  //     setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+  //     return;
+  //   }
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      setAuthError("Skriv inn e-post.");
-      return;
-    }
+  //   const trimmedEmail = email.trim().toLowerCase();
+  //   if (!trimmedEmail) {
+  //     setAuthError("Skriv inn e-post.");
+  //     return;
+  //   }
 
-    if (!password || password.length < 6) {
-      setAuthError("Passordet må være minst 6 tegn.");
-      return;
-    }
+  //   if (!password || password.length < 6) {
+  //     setAuthError("Passordet må være minst 6 tegn.");
+  //     return;
+  //   }
 
-    if (password !== confirmPassword) {
-      setAuthError("Passordene er ikke like i de to feltene.");
-      return;
-    }
+  //   if (password !== confirmPassword) {
+  //     setAuthError("Passordene er ikke like i de to feltene.");
+  //     return;
+  //   }
 
-    setIsLoading(true);
-    const res = await supabase.auth.signUp({
-      email: trimmedEmail,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}${basePath}/admin/`,
-        data: {},
-      },
-    });
+  //   setIsLoading(true);
+  //   const res = await supabase.auth.signUp({
+  //     email: trimmedEmail,
+  //     password,
+  //     options: {
+  //       emailRedirectTo: `${window.location.origin}${basePath}/admin/`,
+  //       data: {},
+  //     },
+  //   });
 
-    if (!res.error && res.data.session) {
-      // signUp ga oss session (OK) – men VERIFISER at passordet faktisk
-      // fungerer for senere innlogging, for dette har vært en bug i Supabase.
-      const verify = await supabase.auth.signInWithPassword({
-        email: trimmedEmail,
-        password,
-      });
-      if (verify.error) {
-        // Hvis verifikasjon feiler → vi hadde en session, men passord er ikke
-        // lagret riktig. Tving en ny sign-in via OTP (reserve) eller si ifra.
-        // Ikke kast brukeren ut, fortsett med eksisterende session.
-        setAuthInfo(
-          "⚠️ Obs: Passordet ditt kan ha blitt lagret feil. Du er logget inn nå, men hvis det ikke virker neste gang: bruk 'Glemt passord?' for å sette nytt. Laster arbeidsflaten…",
-        );
-      } else {
-        setAuthInfo("Velkommen! Bruker er opprettet og du er logget inn. Laster arbeidsflaten…");
-      }
-      setIsLoading(false);
-      setTimeout(() => void goAfterLogin(), 200);
-      return;
-    }
+  //   if (!res.error && res.data.session) {
+  //     // signUp ga oss session (OK) – men VERIFISER at passordet faktisk
+  //     // fungerer for senere innlogging, for dette har vært en bug i Supabase.
+  //     const verify = await supabase.auth.signInWithPassword({
+  //       email: trimmedEmail,
+  //       password,
+  //     });
+  //     if (verify.error) {
+  //       // Hvis verifikasjon feiler → vi hadde en session, men passord er ikke
+  //       // lagret riktig. Tving en ny sign-in via OTP (reserve) eller si ifra.
+  //       // Ikke kast brukeren ut, fortsett med eksisterende session.
+  //       setAuthInfo(
+  //         "⚠️ Obs: Passordet ditt kan ha blitt lagret feil. Du er logget inn nå, men hvis det ikke virker neste gang: bruk 'Glemt passord?' for å sette nytt. Laster arbeidsflaten…",
+  //       );
+  //     } else {
+  //       setAuthInfo("Velkommen! Bruker er opprettet og du er logget inn. Laster arbeidsflaten…");
+  //     }
+  //     setIsLoading(false);
+  //     setTimeout(() => void goAfterLogin(), 200);
+  //     return;
+  //   }
 
-    setIsLoading(false);
+  //   setIsLoading(false);
 
-    if (res.error) {
-      const msg = res.error.message ?? "";
-      if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("email")) {
-        setAuthError(`${msg} — prøv i stedet "Logg inn" øverst, eller "Glemt passord?".`);
-      } else if (msg.toLowerCase().includes("email rate")) {
-        setAuthError("E-postrate-begrensning: vent noen minutter og prøv igjen, eller logg inn med eksisterende passord.");
-      } else {
-        setAuthError(msg);
-      }
-      return;
-    }
+  //   if (res.error) {
+  //     const msg = res.error.message ?? "";
+  //     if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("email")) {
+  //       setAuthError(`${msg} — prøv i stedet "Logg inn" øverst, eller "Glemt passord?".`);
+  //     } else if (msg.toLowerCase().includes("email rate")) {
+  //       setAuthError("E-postrate-begrensning: vent noen minutter og prøv igjen, eller logg inn med eksisterende passord.");
+  //     } else {
+  //       setAuthError(msg);
+  //     }
+  //     return;
+  //   }
 
-    setAuthInfo("Bruker opprettet! Sjekk e-posten din for en bekreftelseslenke (hvis aktivert), så logg inn.");
-  };
+  //   setAuthInfo("Bruker opprettet! Sjekk e-posten din for en bekreftelseslenke (hvis aktivert), så logg inn.");
+  // };
 
-  const resetPassword = async () => {
-    setAuthError(null);
-    setAuthInfo(null);
+  // const resetPassword = async () => {
+  //   setAuthError(null);
+  //   setAuthInfo(null);
 
-    if (!isOnline) {
-      setAuthError("Du er offline. Tilbakestilling krever nett.");
-      return;
-    }
+  //   if (!isOnline) {
+  //     setAuthError("Du er offline. Tilbakestilling krever nett.");
+  //     return;
+  //   }
 
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig.");
-      return;
-    }
+  //   if (!supabase) {
+  //     setAuthError("Mangler Supabase-konfig.");
+  //     return;
+  //   }
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      setAuthError("Skriv inn e-posten din.");
-      return;
-    }
+  //   const trimmedEmail = email.trim().toLowerCase();
+  //   if (!trimmedEmail) {
+  //     setAuthError("Skriv inn e-posten din.");
+  //     return;
+  //   }
 
-    setIsLoading(true);
-    const redirectTo = new URL(`${window.location.origin}${basePath}/`);
-    redirectTo.searchParams.set("authRedirect", requestedNextPath ?? "/admin/");
+  //   setIsLoading(true);
+  //   const redirectTo = new URL(`${window.location.origin}${basePath}/`);
+  //   redirectTo.searchParams.set("authRedirect", requestedNextPath ?? "/admin/");
 
-    const res = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
-      redirectTo: redirectTo.toString(),
-    });
-    setIsLoading(false);
+  //   const res = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+  //     redirectTo: redirectTo.toString(),
+  //   });
+  //   setIsLoading(false);
 
-    if (res.error) {
-      if (res.error.message.toLowerCase().includes("rate limit")) {
-        setAuthError("E-postrate-begrensning. Vent noen minutter, eller bruk magic link knappen under.");
-      } else {
-        setAuthError(res.error.message);
-      }
-      return;
-    }
+  //   if (res.error) {
+  //     if (res.error.message.toLowerCase().includes("rate limit")) {
+  //       setAuthError("E-postrate-begrensning. Vent noen minutter, eller bruk magic link knappen under.");
+  //     } else {
+  //       setAuthError(res.error.message);
+  //     }
+  //     return;
+  //   }
 
-    setAuthInfo("Hvis bruker finnes er det sendt en lenke på e-post for å tilbakestille passordet ditt. Sjekk søppelpost!");
-  };
+  //   setAuthInfo("Hvis bruker finnes er det sendt en lenke på e-post for å tilbakestille passordet ditt. Sjekk søppelpost!");
+  // };
 
-  const saveRecoveryPassword = async () => {
-    setAuthError(null);
-    setAuthInfo(null);
+  // const saveRecoveryPassword = async () => {
+  //   setAuthError(null);
+  //   setAuthInfo(null);
 
-    if (!isOnline) {
-      setAuthError("Du er offline. Lagring krever nett.");
-      return;
-    }
+  //   if (!isOnline) {
+  //     setAuthError("Du er offline. Lagring krever nett.");
+  //     return;
+  //   }
 
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig.");
-      return;
-    }
+  //   if (!supabase) {
+  //     setAuthError("Mangler Supabase-konfig.");
+  //     return;
+  //   }
 
-    if (!password || password.length < 6) {
-      setAuthError("Passordet må være minst 6 tegn.");
-      return;
-    }
+  //   if (!password || password.length < 6) {
+  //     setAuthError("Passordet må være minst 6 tegn.");
+  //     return;
+  //   }
 
-    if (password !== confirmPassword) {
-      setAuthError("Passordene er ikke like i de to feltene.");
-      return;
-    }
+  //   if (password !== confirmPassword) {
+  //     setAuthError("Passordene er ikke like i de to feltene.");
+  //     return;
+  //   }
 
-    setIsLoading(true);
-    const res = await supabase.auth.updateUser({ password });
-    setIsLoading(false);
+  //   setIsLoading(true);
+  //   const res = await supabase.auth.updateUser({ password });
+  //   setIsLoading(false);
 
-    if (res.error) {
-      setAuthError(res.error.message);
-      return;
-    }
+  //   if (res.error) {
+  //     setAuthError(res.error.message);
+  //     return;
+  //   }
 
-    if (typeof window !== "undefined" && window.location.hash) {
-      try {
-        history.replaceState(null, "", " ");
-      } catch {
-        // ignore
-      }
-    }
+  //   if (typeof window !== "undefined" && window.location.hash) {
+  //     try {
+  //       history.replaceState(null, "", " ");
+  //     } catch {
+  //       // ignore
+  //     }
+  //   }
 
-    setAuthInfo("Passordet ditt er lagret! Nå er du logget inn og kan bruke passordet ditt neste gang. Laster arbeidsflaten…");
-    setTimeout(() => void goAfterLogin(), 200);
-  };
+  //   setAuthInfo("Passordet ditt er lagret! Nå er du logget inn og kan bruke passordet ditt neste gang. Laster arbeidsflaten…");
+  //   setTimeout(() => void goAfterLogin(), 200);
+  // };
 
-  const sendLoginLink = async () => {
-    setAuthError(null);
-    setAuthInfo(null);
+  // const sendLoginLink = async () => {
+  //   setAuthError(null);
+  //   setAuthInfo(null);
 
-    if (!isOnline) {
-      setAuthError("Du er offline. Innlogging krever nett.");
-      return;
-    }
+  //   if (!isOnline) {
+  //     setAuthError("Du er offline. Innlogging krever nett.");
+  //     return;
+  //   }
 
-    if (!supabase) {
-      setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+  //   if (!supabase) {
+  //     setAuthError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+  //     return;
+  //   }
 
-    const trimmed = email.trim();
-    if (!trimmed) {
-      setAuthError("Skriv inn e-post.");
-      return;
-    }
+  //   const trimmed = email.trim();
+  //   if (!trimmed) {
+  //     setAuthError("Skriv inn e-post.");
+  //     return;
+  //   }
 
-    const authRedirect = new URL(`${window.location.origin}${basePath}/`);
-    // Preserve ALL context for magic-link redirect tilbake hit, og next-path hvis satt
-    const context = new URLSearchParams(
-      preservedContextForLogin.replace(/^\?/, ""),
-    );
-    for (const [k, v] of context.entries()) {
-      if (k === "next") continue;
-      authRedirect.searchParams.set(k, v);
-    }
-    const np = context.get("next") ?? `${basePath}/admin/`;
-    authRedirect.searchParams.set("authRedirect", np);
+  //   const authRedirect = new URL(`${window.location.origin}${basePath}/`);
+  //   // Preserve ALL context for magic-link redirect tilbake hit, og next-path hvis satt
+  //   const context = new URLSearchParams(
+  //     preservedContextForLogin.replace(/^\?/, ""),
+  //   );
+  //   for (const [k, v] of context.entries()) {
+  //     if (k === "next") continue;
+  //     authRedirect.searchParams.set(k, v);
+  //   }
+  //   const np = context.get("next") ?? `${basePath}/admin/`;
+  //   authRedirect.searchParams.set("authRedirect", np);
 
-    setIsLoading(true);
-    const res = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: {
-        emailRedirectTo: authRedirect.toString(),
-      },
-    });
-    setIsLoading(false);
+  //   setIsLoading(true);
+  //   const res = await supabase.auth.signInWithOtp({
+  //     email: trimmed,
+  //     options: {
+  //       emailRedirectTo: authRedirect.toString(),
+  //     },
+  //   });
+  //   setIsLoading(false);
 
-    if (res.error) {
-      const msg = res.error.message ?? "";
-      if (msg.toLowerCase().includes("rate limit")) {
-        setAuthError("E-postrate-begrensning. Vent noen minutter, eller registrer deg med passord i stedet.");
-      } else {
-        setAuthError(msg);
-      }
-      return;
-    }
+  //   if (res.error) {
+  //     const msg = res.error.message ?? "";
+  //     if (msg.toLowerCase().includes("rate limit")) {
+  //       setAuthError("E-postrate-begrensning. Vent noen minutter, eller registrer deg med passord i stedet.");
+  //     } else {
+  //       setAuthError(msg);
+  //     }
+  //     return;
+  //   }
 
-    setAuthInfo("Sjekk e-posten din (og søppelpost) for en innloggingslenke.");
-  };
+  //   setAuthInfo("Sjekk e-posten din (og søppelpost) for en innloggingslenke.");
+  // };
 
   const router = useRouter();
   const signOut = async () => {
@@ -529,50 +529,50 @@ export function AdminPageClient() {
     router.push("/login")
   };
 
-  const setUserRole = async (
-    targetUserId: string,
-    opts: {
-      role?: AppRole | null;
-      banned?: boolean;
-      expiresAt?: string | null;
-    },
-  ) => {
-    if (!supabase) return;
-    setUsersError(null);
-    setAuthInfo(null);
-    setAuthError(null);
-    try {
-      const res = await supabase.rpc("varroa_upsert_user_role", {
-        p_target_user_id: targetUserId,
-        p_new_role: opts.role ?? null,
-        p_new_expires_at: opts.expiresAt ?? null,
-        p_set_banned: opts.banned === undefined ? null : opts.banned,
-        p_unused_dummy: null,
-      });
-      if (res.error) throw res.error;
-      setAuthInfo(
-        opts.banned
-          ? "Bruker sperret."
-          : opts.role === null
-          ? "Rollen fjernet."
-          : `Rollen er oppdatert til ${getRoleLabel(
-              (opts.role as "STUDENT" | "FAGANSVARLIG") ?? null,
-            )}.`,
-      );
-      await loadUsers();
-      await reload();
-    } catch (e) {
-      const msg =
-        typeof e === "object" && e && "message" in e
-          ? String((e as { message?: unknown }).message)
-          : "Ukjent feil";
-      setUsersError(msg);
-    }
-  };
+  // const setUserRole = async (
+  //   targetUserId: string,
+  //   opts: {
+  //     role?: AppRole | null;
+  //     banned?: boolean;
+  //     expiresAt?: string | null;
+  //   },
+  // ) => {
+  //   if (!supabase) return;
+  //   setUsersError(null);
+  //   setAuthInfo(null);
+  //   setAuthError(null);
+  //   try {
+  //     const res = await supabase.rpc("varroa_upsert_user_role", {
+  //       p_target_user_id: targetUserId,
+  //       p_new_role: opts.role ?? null,
+  //       p_new_expires_at: opts.expiresAt ?? null,
+  //       p_set_banned: opts.banned === undefined ? null : opts.banned,
+  //       p_unused_dummy: null,
+  //     });
+  //     if (res.error) throw res.error;
+  //     setAuthInfo(
+  //       opts.banned
+  //         ? "Bruker sperret."
+  //         : opts.role === null
+  //         ? "Rollen fjernet."
+  //         : `Rollen er oppdatert til ${getRoleLabel(
+  //             (opts.role as "STUDENT" | "FAGANSVARLIG") ?? null,
+  //           )}.`,
+  //     );
+  //     await loadUsers();
+  //     await reload();
+  //   } catch (e) {
+  //     const msg =
+  //       typeof e === "object" && e && "message" in e
+  //         ? String((e as { message?: unknown }).message)
+  //         : "Ukjent feil";
+  //     setUsersError(msg);
+  //   }
+  // };
 
   const openNextSubmission = async () => {
-    if (!supabase) return;
-    setAuthInfo(null);
+    const supabase = await getClient();
+    setActionMsg(null);
     setLoadError(null);
     setIsLoading(true);
 
@@ -641,7 +641,7 @@ export function AdminPageClient() {
 
       const nextId = String(res.data ?? "");
       if (!nextId) {
-        setAuthInfo("Ingen flere ledige saker akkurat nå.");
+        setActionMsg("Ingen flere ledige saker akkurat nå.");
         await reload();
         return;
       }
@@ -877,11 +877,12 @@ export function AdminPageClient() {
                 </div>
               </div>
 
-              {authInfo ? (
+              {actionMsg ? (
                 <div className="mt-4 rounded-2xl border border-emerald-900/50 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-200">
-                  {authInfo}
+                  {actionMsg}
                 </div>
               ) : null}
+              
               {loadError ? (
                 <div className="mt-4 rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">
                   {loadError}
@@ -1089,7 +1090,7 @@ export function AdminPageClient() {
               </div>
             </section>
 
-            {access?.canManageSystem ? (
+            {/* {access?.canManageSystem ? (
               <section className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
@@ -1295,7 +1296,8 @@ export function AdminPageClient() {
                   </div>
                 </div>
               </section>
-            ) : null}
+            ) : null} */}
+            {access.canManageSystem ? <ManageUserSection/> : null}
           </>
         ) : null}
       </main>
