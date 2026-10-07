@@ -46,7 +46,7 @@ export function AdminPageClient() {
   const isOnline = useOnlineStatus();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-  const {user, isAdmin} = useAuth();
+  const {user, authedActions ,  isAdmin} = useAuth();
 
   const adminContextSearch = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -137,7 +137,7 @@ export function AdminPageClient() {
 
 
   // TODO: (TGF) move access into context. It's used a lot.
-  const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
+  // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -180,16 +180,15 @@ export function AdminPageClient() {
       // const { data: sessionData } = await supabase.auth.getSession();
       // const session = sessionData.session;
       if (!user) {
-        setAccess(null);
         setItems([]);
         setAvailableNewCount(0);
         return;
       }
 
-      const nextAccess = await getAuthorizedUserActions(user);
-      setAccess(nextAccess);
+      // const nextAccess = await getAuthorizedUserActions(user);
+      // setAccess(nextAccess);
 
-      if (!nextAccess.role) {
+      if (!authedActions.role) {
         setItems([]);
         setAvailableNewCount(0);
         return;
@@ -255,10 +254,10 @@ export function AdminPageClient() {
   }, [reload]);
 
   useEffect(() => {
-    if (!access?.role || !requestedNextPath) return;
+    if (!authedActions?.role || !requestedNextPath) return;
     if (requestedNextPath === "/admin/" || requestedNextPath === "/admin") return;
     window.location.replace(`${basePath}${requestedNextPath}`);
-  }, [access?.role, basePath, requestedNextPath]);
+  }, [authedActions.role, basePath, requestedNextPath]);
 
   // const signInWithPassword = async () => {
   //   setAuthError(null);
@@ -577,7 +576,7 @@ export function AdminPageClient() {
     setIsLoading(true);
 
     try {
-      const userId = access?.userId;
+      const userId = user?.user_id;
       if (userId) {
         // GAMMEL: varroa_submissions. NY: submissions. "updated_at" er en
         // ekte kolonne (ikke et alias), så sorteringen trenger ingen endring.
@@ -603,7 +602,7 @@ export function AdminPageClient() {
         }
       }
 
-      if (access?.canControl) {
+      if (authedActions?.canControl) {
         // GAMMEL: sorterte på "created_at" - den kolonnen heter nå
         // submission_date i submissions-tabellen (created_at var kun et
         // alias inni getSubmissionSelect(), og gjelder ikke her siden vi
@@ -681,19 +680,19 @@ export function AdminPageClient() {
   }, [items]);
 
   const myItems = useMemo(() => {
-    const userId = access?.userId;
+    const userId = authedActions?.userId;
     if (!userId) return [];
     return items.filter(
       (item) => item.assigned_to === userId || item.processed_by === userId,
     );
-  }, [access?.userId, items]);
+  }, [authedActions?.userId, items]);
 
   const reviewItems = useMemo(
     () =>
       items
-        .filter((item) => isAvailableControlSubmission(item, access?.userId))
+        .filter((item) => isAvailableControlSubmission(item, authedActions?.userId))
         .slice(0, 8),
-    [access?.userId, items],
+    [authedActions?.userId, items],
   );
 
   const trainingItems = useMemo(
@@ -733,9 +732,9 @@ export function AdminPageClient() {
             <div className="text-xs text-zinc-400">Produksjonsverktøy</div>
           </div>
           <div className="hidden flex-1 text-center md:block">
-            {access?.role && access.email ? (
+            {authedActions?.role && user?.email ? (
               <div className="text-sm font-medium text-amber-200/90">
-                👋 Velkommen {getDisplayNameFromEmail(access.email)} ({getRoleLabel(access.role)}), ha
+                👋 Velkommen {getDisplayNameFromEmail(user?.email)} ({getRoleLabel(user?.role)}), ha
                 en fin dag!
               </div>
             ) : null}
@@ -764,10 +763,10 @@ export function AdminPageClient() {
             </a>
           </div>
         </div>
-        {access?.role && access.email ? (
+        {authedActions?.role && user?.email ? (
           <div className="mt-2 text-center md:hidden">
             <div className="text-xs font-medium text-amber-200/90">
-              👋 Velkommen {getDisplayNameFromEmail(access.email)} ({getRoleLabel(access.role)})
+              👋 Velkommen {getDisplayNameFromEmail(user?.email)} ({getRoleLabel(user?.role)})
             </div>
           </div>
         ) : null}
@@ -781,7 +780,7 @@ export function AdminPageClient() {
 
       <main className="mx-auto mt-6 w-full max-w-6xl space-y-4">
     
-        {access?.role == null ? (
+        {user?.role == null ? (
           <div className="rounded-3xl border border-amber-900/60 bg-amber-950/30 p-6">
             <div className="text-2xl font-semibold text-amber-100">
               🔐 Logget inn, men mangler tilgang
@@ -827,7 +826,7 @@ export function AdminPageClient() {
           </div>
         ) : null}
 
-        {access?.role ? (
+        {authedActions?.role ? (
           <>
             <section className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -836,7 +835,7 @@ export function AdminPageClient() {
                     Samlebånd for merking og kvalitetssikring
                   </div>
                   <div className="mt-1 text-sm text-zinc-400">
-                    Rolle: {getRoleLabel(access.role)}. Optimalisert for neste sak, store
+                    Rolle: {getRoleLabel(authedActions.role)}. Optimalisert for neste sak, store
                     bilder og færrest mulig klikk.
                   </div>
                 </div>
@@ -844,7 +843,7 @@ export function AdminPageClient() {
                   <button
                     type="button"
                     onClick={openNextSubmission}
-                    disabled={!access.canUseQueue || isLoading}
+                    disabled={!authedActions.canUseQueue || isLoading}
                     className="h-12 rounded-2xl bg-amber-400 px-5 text-sm font-semibold text-zinc-950 active:opacity-90 disabled:opacity-60"
                   >
                     Start arbeid
@@ -894,7 +893,7 @@ export function AdminPageClient() {
               {statusCards.map((card) => {
                 const ui = getStatusUi(card.key);
                 const value =
-                  card.key === "NY" && !access.canSeeAll
+                  card.key === "NY" && !authedActions.canSeeAll
                     ? Math.max(card.value, card.fallback)
                     : card.value;
                 return (
@@ -1019,7 +1018,7 @@ export function AdminPageClient() {
                           {formatDateTime(item.updated_at ?? item.created_at)}
                         </div>
                         <div className="mt-2 text-xs text-zinc-400">
-                          Forste sjekk: {formatWorkerLabel(access?.userId, item.processed_by)}
+                          Forste sjekk: {formatWorkerLabel(authedActions?.userId, item.processed_by)}
                         </div>
                       </a>
                     ))}
@@ -1297,7 +1296,7 @@ export function AdminPageClient() {
                 </div>
               </section>
             ) : null} */}
-            {access.canManageSystem ? <ManageUserSection/> : null}
+            {authedActions.canManageSystem ? <ManageUserSection/> : null}
           </>
         ) : null}
       </main>
