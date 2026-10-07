@@ -11,7 +11,7 @@ import { AuthorizedUserActions } from "@/lib/auth/roles";
  * get the auth through useAuth()
 **/ 
 type AuthContextType = {
-    user: User|null;
+    user: User;
     authedActions: AuthorizedUserActions;
     isAdmin: boolean;
 }
@@ -27,7 +27,7 @@ export function useAuth():AuthContextType{
 
 
 type AuthProviderProps ={
-    user : User | null;
+    user : User;
     authedActions: AuthorizedUserActions;
     isAdmin : boolean;
     children: React.ReactNode;

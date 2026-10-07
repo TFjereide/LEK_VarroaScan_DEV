@@ -10,17 +10,22 @@ export async function proxy(request: NextRequest) {
     request,
   })
 
-  const {error} = await ensureAnonymousSession();
-  if (error !== AppAuthError.Ok) {
-    console.error(error)
-    return new NextResponse("403: Not authorized", { status: 403 });
+  const {user, error} = await ensureAnonymousSession();
+  if (user == null || error !== AppAuthError.Ok) {
+    console.error("Error:" + error)
+
+    console.log("somehow can't produce even an anonymous user!");
+    return NextResponse.redirect(new URL('/login', request.url));
+    // return new NextResponse("403: Not authorized", { status: 403 });
   }
 
   // dobbeltsjekker admin-path. Litt rart, men ok.
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (!(await isAdmin())) {
+      console.log("Not admin -> redirect to /login");
       return NextResponse.redirect(new URL('/login', request.url));
     }
+    console.log("Is admin -> carry on");
   }
 
   return supabaseResponse;
