@@ -4,7 +4,7 @@ import { registerUser } from '@/lib/auth/actions';
 
 
 interface RegisterUserFormProps {
-    setMsg: (msg: String) => void,
+    setMsg: (msg: string | null) => void,
 }
 
 export function RegisterUserForm(props: RegisterUserFormProps) {

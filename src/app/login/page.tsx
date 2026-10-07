@@ -1,10 +1,8 @@
 
 'use client';
 import { CommonHeader } from "@/components/header";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { SubmitEvent } from "react";
+import { useState } from "react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { loginWithPassword, registerUser } from '@/lib/auth/actions';
 
 import{ LoginUserForm } from "@/components/login/loginUserForm";
 import{ RegisterUserForm } from "@/components/login/registerUserForm";
@@ -21,7 +19,7 @@ type PageMode =
 
 export default function LogInPage() {
     const isOnline = useOnlineStatus();
-    const [friendlyMsg, setFriendlyMsg] = useState<String | null>(null);
+    const [friendlyMsg, setFriendlyMsg] = useState<string | null>(null);
 
     const [pageMode, setPageMode] = useState<PageMode>(() => {
         if (typeof window === "undefined") return "login";

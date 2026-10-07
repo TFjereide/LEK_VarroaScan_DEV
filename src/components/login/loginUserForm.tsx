@@ -4,7 +4,7 @@ import { loginWithPassword } from '@/lib/auth/actions';
 
 
 interface LoginUserFormProps {
-    setMsg: (msg: String) => void,
+    setMsg: (msg: string|null) => void,
 }
 
 export function LoginUserForm(props: LoginUserFormProps) {

@@ -4,7 +4,7 @@ import { sendRecoveryEmail } from '@/lib/auth/actions';
 
 
 interface ForgotPasswordFormProps {
-    setMsg: (msg: String) => void,
+    setMsg: (msg: string | null) => void,
 }
 
 export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
