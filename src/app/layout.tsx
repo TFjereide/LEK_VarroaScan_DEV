@@ -4,6 +4,7 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 import { AuthProvider } from "./auth-provider";
 import { getCurrentUser, isAdmin } from "@/lib/auth/actions";
+import { getAuthorizedUserActions } from "@/lib/auth/roles";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,6 +53,7 @@ export default async function RootLayout({
   // authprovider to make it available everywhere.
   const { user } = await getCurrentUser();
   const _isAdmin  = await isAdmin();
+  const _authedActions  = await getAuthorizedUserActions(user);
 
   return (
     <html
@@ -67,7 +69,7 @@ export default async function RootLayout({
           </div>
         ) : null}
 
-        <AuthProvider user={user} isAdmin={_isAdmin}>
+        <AuthProvider user={user} authedActions={_authedActions} isAdmin={_isAdmin}>
           {children}
         </AuthProvider>
 

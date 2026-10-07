@@ -2,13 +2,16 @@
 
 import { createContext, useContext } from "react";
 import { type User } from "@/lib/auth/user";
+import { AuthorizedUserActions } from "@/lib/auth/roles";
 
 type AuthContextType = {
     user: User|null;
+    authedActions: AuthorizedUserActions;
     isAdmin: boolean;
 }
 type AuthProviderProps ={
     user : User | null;
+    authedActions: AuthorizedUserActions;
     isAdmin : boolean;
     children: React.ReactNode;
 }
@@ -20,9 +23,9 @@ type AuthProviderProps ={
 **/ 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({user, isAdmin , children}:AuthProviderProps){
+export function AuthProvider({user, authedActions, isAdmin , children}:AuthProviderProps){
     return (
-        <AuthContext.Provider value={{user, isAdmin}}>
+        <AuthContext.Provider value={{user, authedActions, isAdmin}}>
             {children}
         </AuthContext.Provider>
     );
