@@ -1,14 +1,13 @@
 "use client";
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   appendAdminContext,
   getAdminContextSearch,
   getAdminReturnInfo,
 } from "@/lib/adminNavigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+// import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getAuthorizedUserActions, type AuthorizedUserActions, type AppRole } from "@/lib/auth/roles";
+// import { getAuthorizedUserActions, type AuthorizedUserActions, type AppRole } from "@/lib/auth/roles";
 import { User } from "@/lib/auth/user";
 import {
   formatWorkerLabel,
@@ -26,12 +25,12 @@ import {
 
 import * as serverActions from "@/lib/auth/actions";
 
-
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";
 import { ManageUserSection } from "@/components/manageUsers/manageUsers";
-import { fetchSubmissions } from "@/lib/varroaScanDb";
+// import { fetchSubmissions } from "@/lib/varroaScanDb";
 import { getClient } from "@/lib/auth/client";
+// import { CommonHeader } from "@/components/header";
 
 
 function normalizeInternalRedirectPath(value: string | null) {
@@ -725,6 +724,7 @@ export function AdminPageClient() {
 
   return (
     <div className="min-h-dvh px-4 pb-10 pt-8">
+      {/* <CommonHeader url={""} label="l" isOnline={isOnline}/> */}
       <header className="mx-auto w-full max-w-6xl">
         <div className="flex items-center justify-between gap-4">
           <div className="flex-shrink-0">

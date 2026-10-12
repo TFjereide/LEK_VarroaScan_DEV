@@ -2,6 +2,7 @@
 import { getAppVersion } from "@/lib/appVersion";
 import { useAuth } from "@/app/auth-provider";
 import { logOut } from "@/lib/auth/actions";
+import { PropsWithChildren } from "react";
 
 type CommonHeaderProps = {
   url: string | null;
@@ -9,7 +10,7 @@ type CommonHeaderProps = {
   isOnline: boolean;
 };
 
-export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
+export function CommonHeader({url, label, isOnline, children} : PropsWithChildren<CommonHeaderProps>){
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const appVersion = getAppVersion()
@@ -59,6 +60,8 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
             </div>
           </div>
           
+          {children}
+
           {user === null ?
           <a
             href={`${basePath}/login`}
