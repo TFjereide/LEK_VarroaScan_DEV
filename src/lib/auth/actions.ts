@@ -3,12 +3,15 @@ import { type User as SupabaseUser } from '@supabase/auth-js';
 import { getClient } from "@/lib/auth/server";
 import { TestUser, type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
-import { AppRole } from './roles';
+import { AppRole, validRoles } from './roles';
 
 
 // All return this type:
-type AuthData = {
-    user: User | null;
+export type AuthData = {
+    user: User;
+    error: 'ok';
+}|{
+    user: null;
     error: AppAuthError;
 }
 
@@ -23,6 +26,7 @@ export async function loginWithPassword(email: string, password: string): Promis
         password,
     });
     if (error) return { user: null, error: toAppAuthError(error) };
+    console.log("Was signed in.")
     return await getAppUserFromSupabaseUser(data.user);
 }
 
@@ -38,6 +42,9 @@ export async function registerUser(email: string, password: string): Promise<Aut
             emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/`
         },
     });
+    // TODO: add to varroa_user_roles
+
+
     if (error) return { user: null, error: toAppAuthError(error) };
     return await getAppUserFromSupabaseUser(data.user);
 }
@@ -112,6 +119,7 @@ export async function sendRecoveryEmail(email: string): Promise<AuthData> {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/recovery`,
     });
+    console.log("recovery redirectTo: ", `${process.env.NEXT_PUBLIC_SITE_URL}/recovery`);
     return { user: null, error: toAppAuthError(error) }
 }
 
@@ -139,19 +147,19 @@ export async function isAdmin(): Promise<boolean> {
     if (toAppAuthError(error) !== AppAuthError.Ok || !data.user) {
         return false
     }
+    const {user, error:aError} = await getAppUserFromSupabaseUser(data.user);
 
-    const adminRes = await supabase
-        .from("varroa_admins")
-        .select("user_id")
-        .eq("user_id", data.user.id)
-        .maybeSingle();
-
-    if (adminRes.error || adminRes.count === null || adminRes.count <= 0) {
+    if (!user || aError !== AppAuthError.Ok){
         return false
-    };
+    }
+
+
+    if( user.role === "FAGANSVARLIG" || user.role === "STUDENT" || user.role === "SUPERADMIN"){
+        return true
+    }
 
     // NOTE: Burde sjekke om brukeren eksisterer ellers også...
-    return true
+    return false;
 }
 
 
@@ -160,21 +168,24 @@ export async function isAdmin(): Promise<boolean> {
  * */
 async function getAppUserFromSupabaseUser(authUser: SupabaseUser | null): Promise<AuthData> {
     if (authUser == null || authUser.id.length === 0)
-        return { user: null, error: AppAuthError.NotFound };
+        return { user: null, error: AppAuthError.InvalidCredentials };
 
+    console.log("getappuser: ",authUser.id)
     const supabase = await getClient();
     const userRes = await supabase
-        .from("varroa_users")
+        .from("varroa_user_roles")
         .select("role, expires_at, banned_at, created_at")
         .eq("user_id", authUser.id)
         .maybeSingle();
 
     if (!userRes.success) {
-        return { user: null, error: AppAuthError.ServerError };
+        return { user: null, error: AppAuthError.NotFound };
     };
 
+    console.log("FOund something....")
+
     const dbRole =
-        typeof userRes.data?.role === "string" && userRes.data?.role in ["SUPERADMIN", "FAGANSVARLIG", "STUDENT", "BANNED", "NONE"]
+        typeof userRes.data?.role === "string" && validRoles.includes(userRes.data.role as AppRole )
             ? (userRes.data.role as AppRole)
             : "NONE";
 
@@ -204,6 +215,8 @@ async function getAppUserFromSupabaseUser(authUser: SupabaseUser | null): Promis
         expires_at: dbExpiresAt,
         banned_at: dbBannedAt,
     }
+
+    console.log("hmmm")
 
     return { user: finalUser, error: AppAuthError.Ok };
 }

@@ -3,6 +3,7 @@ import { getAppVersion } from "@/lib/appVersion";
 import { useAuth } from "@/app/auth-provider";
 import { logOut } from "@/lib/auth/actions";
 import { PropsWithChildren } from "react";
+import { useRouter } from "next/navigation";
 
 type CommonHeaderProps = {
   url: string | null;
@@ -14,9 +15,13 @@ export function CommonHeader({url, label, isOnline, children} : PropsWithChildre
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
     const appVersion = getAppVersion()
+    const router = useRouter()
 
     const onBack = () => {
-        if (url) return;
+        if (url) {
+          router.push(url);
+          return;
+        }
         if (window.history.length > 1) {
             window.history.back();
             return;
@@ -62,7 +67,7 @@ export function CommonHeader({url, label, isOnline, children} : PropsWithChildre
           
           {children}
 
-          {user === null ?
+          {user.role === "NONE" ?
           <a
             href={`${basePath}/login`}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"

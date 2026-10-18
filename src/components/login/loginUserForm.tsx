@@ -1,6 +1,7 @@
 'use client';
 import { SubmitEvent } from "react";
 import { loginWithPassword } from '@/lib/auth/actions';
+import { useRouter } from "next/navigation";
 
 
 interface LoginUserFormProps {
@@ -8,7 +9,7 @@ interface LoginUserFormProps {
 }
 
 export function LoginUserForm(props: LoginUserFormProps) {
-    
+    const router = useRouter();
     // VERY simple client-side validation
     const onLogin = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -21,7 +22,15 @@ export function LoginUserForm(props: LoginUserFormProps) {
             props.setMsg("Du må skrive inn en epost-addresse og passord.")
             return;
         }
-        await loginWithPassword(email, password);
+        loginWithPassword(email, password).then((data)=>{
+            if (data.error !== "ok"){
+                props.setMsg("Error: " + data.error);
+            }else{
+                router.push(`${process.env.NEXT_PUBLIC_SITE_URL}/admin`)
+                console.log("What?")
+            }
+        });
+
     }
 
     const onLogInLink = () => { }

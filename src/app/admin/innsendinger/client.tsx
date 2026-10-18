@@ -7,17 +7,11 @@ import {
   getAdminContextSearch,
   getAdminReturnInfo,
 } from "@/lib/adminNavigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getAuthorizedUserActions, type AuthorizedUserActions } from "@/lib/auth/roles";
 import {
-  formatWorkerLabel,
-  formatDateTime,
   getDisplayNameFromEmail,
   getRoleLabel,
-  getStatusUi,
   getSubmissionSelect,
-  getTypeLabel,
   getWorkflowMigrationMessage,
   isAvailableControlSubmission,
   isMissingWorkflowSchemaError,
@@ -27,13 +21,14 @@ import {
 import { useAuth } from "@/app/auth-provider";
 import { getClient } from "@/lib/auth/client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
+import { PostgrestResponse } from "@supabase/supabase-js";
 
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
 export function AdminQueueClient() {
 
   const isOnline = useOnlineStatus();
-  const { user, authedActions, isAdmin } = useAuth();
+  const { user, authedActions } = useAuth();
 
   const searchParams = useSearchParams();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -64,13 +59,11 @@ export function AdminQueueClient() {
 
   // const [isAuthed, setIsAuthed] = useState(false);
   // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
-  const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
+  const [itemsUnfiltered, setItemsUnfiltered] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-
 
   const handleDelete = useCallback(async (id: string, title: string) => {
     console.log("handledelete: ", items.length)
@@ -118,41 +111,10 @@ export function AdminQueueClient() {
 
   const view = (searchParams.get("view") as QueueView | null) ?? "all";
 
-  // TODO:
-  const reload = useCallback(async () => {
-
-    console.log("reload")
-    setLoadError(null);
-    if (!supabase) {
-      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
-    setIsLoading(true);
+  const fetchItems = async () => {
+    console.log("Fetching items");
     try {
-      // const { data: sessionData } = await supabase.auth.getSession();
-      // const session = sessionData.session;
-      // setIsAuthed(Boolean(session));
-      // if (!session) {
-      //   setAccess(null);
-      //   setItems([]);
-      //   setAvailableNewCount(0);
-      //   window.location.replace(adminLoginHref);
-      //   return;
-      // }
-
-      // const nextAccess = await getAuthorizedUserActions(supabase, session);
-      // setAccess(nextAccess);
-      if (!user?.role) {
-        setItems([]);
-        setAvailableNewCount(0);
-        setLoadError("Du mangler rolle i VarroaScan-produksjonen.");
-        return;
-      }
-
-      // GAMMEL: leste fra varroa_submissions (gamle, ikke-migrerte
-      // databasen). NY: submissions - getSubmissionSelect() gir samme
-      // feltnavn tilbake som før, så resten av filen er uendret.
-      const [submissionsRes, availableRes] = await Promise.all([
+      const [submissionsResRaw, availableResRaw] = await Promise.all([
         supabase
           .from("submissions")
           .select(getSubmissionSelect())
@@ -161,26 +123,46 @@ export function AdminQueueClient() {
         supabase.rpc("varroa_available_new_count"),
       ]);
 
+      console.log("submissionsResRaw:", submissionsResRaw);
+      console.log("availableResRaw:", availableResRaw);
+
+      const submissionsRes = submissionsResRaw as PostgrestResponse<VarroaSubmissionRecord>;
+      const availableRes = availableResRaw as PostgrestResponse<number>;
+
       if (submissionsRes.error) {
-        if (isMissingWorkflowSchemaError(submissionsRes.error)) {
-          setLoadError(getWorkflowMigrationMessage());
-          setItems([]);
-        } else {
-          throw submissionsRes.error;
-        }
+        console.error("Failed to fetch submissions:", submissionsRes.error);
       } else {
-        setItems((submissionsRes.data ?? []) as unknown as VarroaSubmissionRecord[]);
+        const fetchedItems = submissionsRes.data ?? [];
+        setItemsUnfiltered(fetchedItems);
+        console.log("Fetched items: ", itemsUnfiltered);
       }
 
-      if (availableRes.error) {
-        if (isMissingWorkflowSchemaError(availableRes.error)) {
-          setAvailableNewCount(0);
-        } else {
-          throw availableRes.error;
-        }
+      if (!availableRes.success) {
+        console.error("Failed to fetch submissions count:", availableRes.error)
       } else {
-        setAvailableNewCount(Number(availableRes.data ?? 0));
+        const availableCount = availableRes.data ?? 0;
+        setAvailableNewCount(availableCount);
+        console.log("Fetched items count: ", availableNewCount)
       }
+    } catch (e) {
+
+    }
+  }
+
+  // TODO:
+  const reload = useCallback(async () => {
+    
+    console.log("reload")
+    setLoadError(null);
+
+    if (!supabase) {
+      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      fetchItems();
     } catch (e) {
       console.log("hnngh")
 
@@ -189,43 +171,22 @@ export function AdminQueueClient() {
           ? String((e as { message?: unknown }).message)
           : "Ukjent feil";
       setLoadError(message);
-      setItems([]);
+      setItemsUnfiltered([]);
     } finally {
       setIsLoading(false);
     }
   }, [adminLoginHref, supabase]);
 
-
+  console.log("before useffect")
   useEffect(() => {
+    console.log("useffect")
+    void fetchItems()
+  }, [])
 
-    const boop = async () => {
-      const [submissionsRes, availableRes] = await Promise.all([
-        supabase
-          .from("submissions")
-          .select(getSubmissionSelect())
-          .order("updated_at", { ascending: false })
-          .limit(500),
-        supabase.rpc("varroa_available_new_count"),
-      ]);
-
-      if (submissionsRes.success) {
-        setItems((submissionsRes.data ?? []) as unknown as VarroaSubmissionRecord[]);
-      }
-
-    }
-    boop()
-  })
-
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      void reload();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [reload]);
 
   // TODO:
   const openNextSubmission = async () => {
-    console.log("next submission: ", items.length)
+    console.log("next submission: ", itemsUnfiltered.length)
 
     if (!supabase) return;
     setLoadError(null);
@@ -317,33 +278,31 @@ export function AdminQueueClient() {
 
   const filteredItems = useMemo(() => {
     const userId = user?.user_id;
-    console.log("filter: ", authedActions)
-    console.log("items: ", items)
 
     if (view === "mine") {
-      return items.filter(
+      return itemsUnfiltered.filter(
         (item) => item.assigned_to === userId || item.processed_by === userId,
       );
     }
     if (authedActions.canControl && view === "kontroll") {
-      return items.filter((item) => isAvailableControlSubmission(item, userId));
+      return itemsUnfiltered.filter((item) => isAvailableControlSubmission(item, userId));
     }
     if (view === "training") {
-      return items.filter(
+      return itemsUnfiltered.filter(
         (item) => item.status === "GODKJENT" || item.status === "KLAR_FOR_TRENING",
       );
     }
     if (view === "archive") {
-      return items.filter((item) => item.status === "ARKIVERT");
+      return itemsUnfiltered.filter((item) => item.status === "ARKIVERT");
     }
     if (!authedActions.canSeeAll) {
-      return items.filter(
+      return itemsUnfiltered.filter(
         (item) => item.assigned_to === userId || item.processed_by === userId,
       );
     }
-    return items;
+    return itemsUnfiltered;
 
-  }, [user, authedActions, items, view]);
+  }, [user, authedActions, itemsUnfiltered, view]);
 
   const queueTitle = useMemo(() => {
     switch (view) {
@@ -512,17 +471,17 @@ export function AdminQueueClient() {
                   <div className="px-5 py-8 text-sm text-zinc-400">
                     Ingen saker i denne visningen ennå.
                   </div>
-                ):(
-                <div className="divide-y divide-zinc-800">
-                  {filteredItems.map((item) =>( 
-                    <SubmissionListItemcard 
-                      key={item.id}
-                      item={item} 
-                      view={view} 
-                      deletingID={deletingId} 
-                      onDelete={handleDelete}/>
-                  ))}
-                </div>)
+                ) : (
+                  <div className="divide-y divide-zinc-800">
+                    {filteredItems.map((item) => (
+                      <SubmissionListItemcard
+                        key={item.id}
+                        item={item}
+                        view={view}
+                        deletingID={deletingId}
+                        onDelete={handleDelete} />
+                    ))}
+                  </div>)
               }
             </section>
           </>

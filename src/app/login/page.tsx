@@ -1,38 +1,52 @@
-
 'use client';
 import { CommonHeader } from "@/components/header";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 import{ LoginUserForm } from "@/components/login/loginUserForm";
 import{ RegisterUserForm } from "@/components/login/registerUserForm";
 import{ ForgotPasswordForm } from "@/components/login/forgotPasswordForm";
-import{ RecoverPasswordForm } from "@/components/login/recoverPasswordForm";
+import { useSearchParams } from "next/navigation";
+import { useAuth } from "../auth-provider";
+// import{ RecoverPasswordForm } from "@/components/login/recoverPasswordForm";
 
 
 type PageMode =
     | "login"
     | "register"
-    | "forgot"
-    | "recovery";
+    | "forgot";
+    // | "recovery";
 
 
 export default function LogInPage() {
+    const {user} = useAuth()
     const isOnline = useOnlineStatus();
     const [friendlyMsg, setFriendlyMsg] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+
+    useEffect( () =>{
+        const redirectedFrom = searchParams.get("redirectedfrom");
+        if (redirectedFrom === "admin"){
+            setPageMode("login")
+            setFriendlyMsg("For å komme deg inn på admindomenet må du være admin.")
+        }
+        else if (redirectedFrom === "register"){
+            setPageMode("register")
+        }
+    })
 
     const [pageMode, setPageMode] = useState<PageMode>(() => {
         if (typeof window === "undefined") return "login";
         const hash = window.location.hash.replace(/^#/, "");
         if (!hash) return "login";
-        const params = new URLSearchParams(hash);
+        // const params = new URLSearchParams(hash);
         setFriendlyMsg(null);
-        return params.get("type") === "recovery" ? "recovery" : "login";
+        return "login";
     });
 
     return (
         <div className="min-h-dvh px-4 pb-10 pt-8">
-            <CommonHeader url={"placeholder"} label={"placeholder"} isOnline={isOnline} />
+            <CommonHeader url={"/"} label={"til forsiden"} isOnline={isOnline} />
             <main className="mx-auto mt-6 w-full max-w-6xl space-y-4">
 
                 <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-6">
@@ -94,7 +108,7 @@ export default function LogInPage() {
                         "px-4 py-4 text-sm",
                         "text-indigo-200"
                     ].join(" ")}>
-                        {(
+                        {user.role === "NONE" ?(
                             <>
                                 <div className="font-semibold text-base">
                                     🧑‍🎓 Studenter?
@@ -103,13 +117,18 @@ export default function LogInPage() {
                                     Ikke bruk denne innloggingslenken for studenter. Gi dem den direkte lenken til <code className="text-zinc-50">/admin</code> i LEK-VarroaScan, der kan de <b>registrere seg med skole-e-post + eget passord</b> selv.
                                 </div>
                             </>
-                        )}
+                        ):(
+                                <div className="font-semibold text-base">
+                                    Du er allerede logget inn.
+                                </div>
+                            )
+                        }
                     </div>
                     
                     {pageMode === "login" ? <LoginUserForm setMsg={setFriendlyMsg}/> : null}
                     {pageMode === "register" ?<RegisterUserForm setMsg={setFriendlyMsg}/>: null}
                     {pageMode === "forgot" ? <ForgotPasswordForm setMsg={setFriendlyMsg}/>: null}
-                    {pageMode === "recovery" ? <RecoverPasswordForm setMsg={setFriendlyMsg}/> : null}
+                    {/* {pageMode === "recovery" ? <RecoverPasswordForm setMsg={setFriendlyMsg}/> : null} */}
 
                 </div>
                 {friendlyMsg ? (

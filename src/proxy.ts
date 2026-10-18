@@ -23,7 +23,7 @@ export async function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (!(await isAdmin())) {
       console.log("Not admin -> redirect to /login");
-      return NextResponse.redirect(new URL('/login', request.url));
+      return NextResponse.redirect(new URL('/login?redirectedfrom=admin', request.url));
     }
     console.log("Is admin -> carry on");
   }

@@ -1,6 +1,6 @@
 'use client';
-import { SubmitEvent } from "react";
-import { sendRecoveryEmail } from '@/lib/auth/actions';
+import { SubmitEvent, useState } from "react";
+import { AuthData, sendRecoveryEmail } from '@/lib/auth/actions';
 
 
 interface ForgotPasswordFormProps {
@@ -9,6 +9,7 @@ interface ForgotPasswordFormProps {
 
 export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
 
+    const [msg, setMsg] = useState<string|null>(null);
     const onForgot = (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
 
@@ -18,9 +19,12 @@ export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
             props.setMsg("Du må skrive inn en epost.")
             return;
         }
-        sendRecoveryEmail(email);
-     }
-
+        sendRecoveryEmail(email)
+            .then((authData : AuthData)=>{
+                setMsg(authData.error);
+            });
+    }
+  
     return (
         <form onSubmit={onForgot} className="mt-6 grid grid-cols-1 gap-4">
             <label className="text-xs font-semibold text-zinc-300">
@@ -40,6 +44,7 @@ export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
             >
                 {"📧 Send lenke for nytt passord"}
             </button>
+            {msg?<p className="mt-5 rounded-2xl border border-red-900/60 bg-red-950/40 px-4 py-3 text-sm text-red-200">Error: {msg}</p>:null}
         </form>
     )
 }

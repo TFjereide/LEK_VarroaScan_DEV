@@ -4,7 +4,9 @@ import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 import { AuthProvider } from "./auth-provider";
 import { getCurrentUser, isAdmin } from "@/lib/auth/actions";
-import { getAuthorizedUserActions } from "@/lib/auth/roles";
+import { getAuthorizedUserActions } from "@/lib/auth/roles.server";
+import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles";
+import { NullUser } from "@/lib/auth/user";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,8 +54,8 @@ export default async function RootLayout({
   // User auth is used all over the app, so here it is provided to the 
   // authprovider to make it available everywhere.
   const { user } = await getCurrentUser();
-  const _isAdmin  = await isAdmin();
-  const _authedActions  = await getAuthorizedUserActions(user);
+  const _isAdmin  = user?.role == "FAGANSVARLIG" || user?.role == "STUDENT" || user?.role == "SUPERADMIN";
+  const _authedActions  = user && user.role ? getRoleAuthorizedActions(user, user.role) : nilAuthorizedUserActions();
 
   return (
     <html
@@ -69,7 +71,7 @@ export default async function RootLayout({
           </div>
         ) : null}
 
-        <AuthProvider user={user} authedActions={_authedActions} isAdmin={_isAdmin}>
+        <AuthProvider user={user ? user : NullUser} authedActions={_authedActions} isAdmin={_isAdmin}>
           {children}
         </AuthProvider>
 

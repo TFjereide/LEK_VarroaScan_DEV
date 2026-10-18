@@ -2,7 +2,6 @@ import { useAuth } from "@/app/auth-provider";
 import { appendAdminContext } from "@/lib/adminNavigation";
 import { formatDateTime, formatWorkerLabel, getStatusUi, getTypeLabel, VarroaSubmissionRecord } from "@/lib/varroaWorkflow";
 
-
 interface SubmissionListItemcardParams{
     item: VarroaSubmissionRecord;
     view: string;
@@ -10,7 +9,6 @@ interface SubmissionListItemcardParams{
     // returnTo :string;
     onDelete : (id: string, title: string) => Promise<void>
 }
-
 
 
 export function SubmissionListItemcard({item, view, deletingID, onDelete}:SubmissionListItemcardParams) {

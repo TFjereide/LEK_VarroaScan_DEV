@@ -11,6 +11,7 @@ interface RecoverPasswordFormProps {
 export function RecoverPasswordForm(props: RecoverPasswordFormProps) {
 
     const [canPasswordRecovery, setCanPasswordRecovery] = useState<boolean>(false);
+    
     useEffect( () => {
         const supabase = getClient();
         const {data:{subscription}} = supabase.auth.onAuthStateChange((event) => {
