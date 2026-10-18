@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { ensureAnonymousSession, isAdmin } from "@/lib/auth/actions";
+import { ensureAnonymousSession, isAdmin } from "@/lib/auth/actions.server";
 import { AppAuthError } from "./lib/auth/appAuthError";
 // import { cookies } from 'next/headers';
 

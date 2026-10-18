@@ -1,6 +1,6 @@
 'use client';
 import { SubmitEvent } from "react";
-import { loginWithPassword } from '@/lib/auth/actions';
+import { loginWithPassword } from '@/lib/auth/actions.server';
 import { useRouter } from "next/navigation";
 
 

@@ -1,62 +1,33 @@
 "use server"
-import { AppRole, AuthorizedUserActions, getRoleAuthorizedActions, validRoles } from "./roles";
-import { getClient } from "./server";
+import { getUserRole } from "../varroaScanDb";
+import { getRoleAuthorizedActions} from "./roles.client";
+import { AppRole, AuthorizedUserActions } from "./roles.types";
+import { getClient } from "./supabase.server";
 import { User, NullUser } from "./user";
 
-export async function getAuthorizedUserActions(user: User | null): Promise<AuthorizedUserActions> {
 
+/**
+ 
+NOTE: Should be deprecated!
+ 
+Determines the actions a user is authorized to perform based on their role.
+Rechecks the user's role against the database if they already have a role,
+then returns the corresponding authorized actions.
+@param user - The user to determine authorized actions for, or null to
+fall back to NullUser.
+@returns A promise resolving to the actions authorized for the user's role.
+NOTE: Users with a role of "NONE" skip the database role check entirely. */
+export async function getAuthorizedUserActions(user: User | null): Promise<AuthorizedUserActions> {
   if (!user) {
     user = NullUser;
   }
 
   let role: AppRole = user.role ?? "NONE";
-
-
-  // if (process.env.ACCESS_MODE_DEBUG === "true") {
-  //   role = "SUPERADMIN";
   if (role != "NONE") {
-    // Check in database for matching roles
+    // Is this like a recheck?
     const supabase = await getClient();
-    const roleRes = await supabase
-      .from("varroa_user_roles")
-      .select("role")
-      .eq("user_id", user.user_id)
-      .maybeSingle();
+    role =  await getUserRole(supabase, user.user_id)
 
-    if (roleRes.error) {
-      console.error(roleRes.error.message);
-    }
-    // FIXME: replace with something better at some point.
-
-
-    const dbRole =
-      typeof roleRes.data?.role === "string" && 
-      validRoles.includes(roleRes.data.role as AppRole)
-        ? (roleRes.data.role as AppRole)
-        : "NONE";
-
-
-    role = dbRole;
-
-    // FIXME: this should be in the user_roles table, not here.
-    // sort of a second pass to find out if someone is an "admin", which isn't a role?
-    // I guess it'll be a "SUPERADMIN" for now
-    const adminRes = await supabase
-      .from("varroa_admins")
-      .select("user_id")
-      .eq("user_id", user.user_id)
-      .maybeSingle();
-
-    if (adminRes.error) {
-      console.error(adminRes.error)
-    }
-
-    if (adminRes.data?.user_id) {
-      // strange check here too....
-      // if (SUPER_ADMIN_EMAILS.has(user.email)) {
-      role = "SUPERADMIN";
-      // }
-    }
   }
   return getRoleAuthorizedActions(user, role);
 }

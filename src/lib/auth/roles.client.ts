@@ -8,11 +8,9 @@
  * 
  * Additionally, the last step should ideally be logged if the user is able to attempt an action they're not authorized to do.
 */
-import { getClient } from "./server";
+import { AppRole, AuthorizedUserActions } from "./roles.types";
+import { getClient } from "./supabase.server";
 import { User, NullUser } from "./user";
-
-export type AppRole = "SUPERADMIN" | "FAGANSVARLIG" | "STUDENT" | "BANNED" | "NONE";
-export const validRoles = ["SUPERADMIN", "FAGANSVARLIG", "STUDENT", "BANNED", "NONE"];
 
 
 // FIXME: This should NOT be here at any point, ever! BOO! bad llm, boo!
@@ -28,19 +26,6 @@ function isMissingRoleTableError(value: unknown) {
   const message = String((value as { message?: unknown }).message ?? "");
   return message.includes("varroa_user_roles");
 }
-
-// FIXME: userId and email make NO sense here if you already have it in the user and a bunch of other places
-export type AuthorizedUserActions = {
-  userId: string | null;
-  email: string | null;
-  role: AppRole | null;
-  canManageSystem: boolean;
-  canSeeAll: boolean;
-  canControl: boolean;
-  canWork: boolean;
-  canUseQueue: boolean;
-  canDeleteAnything: boolean;
-};
 
 export function nilAuthorizedUserActions():AuthorizedUserActions {
       return {

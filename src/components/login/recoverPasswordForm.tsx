@@ -1,7 +1,7 @@
 'use client';
 import { SubmitEvent, useEffect, useState } from "react";
-import { getClient } from "@/lib/auth/client";
-import { updatePassword } from "@/lib/auth/actions";
+import { getClient } from "@/lib/auth/supabase.client";
+import { updatePassword } from "@/lib/auth/actions.server";
 
 
 interface RecoverPasswordFormProps {

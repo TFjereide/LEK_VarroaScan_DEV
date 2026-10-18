@@ -1,9 +1,9 @@
 'use server';
 import { type User as SupabaseUser } from '@supabase/auth-js';
-import { getClient } from "@/lib/auth/server";
-import { TestUser, type User } from "@/lib/auth/user";
+import { getClient } from "@/lib/auth/supabase.server";
+import { type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
-import { AppRole, validRoles } from './roles';
+import { getUserRoleExtended } from '../varroaScanDb';
 
 
 // All return this type:
@@ -26,7 +26,6 @@ export async function loginWithPassword(email: string, password: string): Promis
         password,
     });
     if (error) return { user: null, error: toAppAuthError(error) };
-    console.log("Was signed in.")
     return await getAppUserFromSupabaseUser(data.user);
 }
 
@@ -172,51 +171,21 @@ async function getAppUserFromSupabaseUser(authUser: SupabaseUser | null): Promis
 
     console.log("getappuser: ",authUser.id)
     const supabase = await getClient();
-    const userRes = await supabase
-        .from("varroa_user_roles")
-        .select("role, expires_at, banned_at, created_at")
-        .eq("user_id", authUser.id)
-        .maybeSingle();
+    const userRole = await getUserRoleExtended(supabase, authUser.id)
 
-    if (!userRes.success) {
+    if (!userRole) {
         return { user: null, error: AppAuthError.NotFound };
     };
-
-    console.log("FOund something....")
-
-    const dbRole =
-        typeof userRes.data?.role === "string" && validRoles.includes(userRes.data.role as AppRole )
-            ? (userRes.data.role as AppRole)
-            : "NONE";
-
-    const dbExpiresAt =
-        typeof userRes.data?.expires_at === "string"
-            ? userRes.data?.expires_at as string
-            : null;
-
-    const dbCreatedAt =
-        typeof userRes.data?.created_at === "string"
-            ? userRes.data?.created_at as string
-            : null;
-
-    const dbBannedAt =
-        typeof userRes.data?.banned_at === "string"
-            ? userRes.data?.banned_at as string
-            : null;
-
-
     const finalUser: User = {
         user_id: authUser.id,
         email: authUser.email ?? "",
         created_at: authUser.created_at,
         last_sign_in_at: authUser.last_sign_in_at === undefined ? null : authUser.last_sign_in_at,
-        role: dbRole,
-        role_created_at: dbCreatedAt,
-        expires_at: dbExpiresAt,
-        banned_at: dbBannedAt,
+        role: userRole.role,
+        role_created_at: userRole.created_at,
+        expires_at: userRole.expires_at,
+        banned_at: userRole.banned_at,
     }
-
-    console.log("hmmm")
 
     return { user: finalUser, error: AppAuthError.Ok };
 }

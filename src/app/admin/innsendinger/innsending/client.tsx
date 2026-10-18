@@ -41,7 +41,7 @@ import {
 import { ZoomableAnnotatedImage } from "@/components/submissions/zoomableAnnotatedImage"
 
 import { useAuth } from "@/app/auth-provider";
-import { getClient } from "@/lib/auth/client";
+import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 

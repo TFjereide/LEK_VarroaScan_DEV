@@ -3,9 +3,9 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 import { AuthProvider } from "./auth-provider";
-import { getCurrentUser, isAdmin } from "@/lib/auth/actions";
-import { getAuthorizedUserActions } from "@/lib/auth/roles.server";
-import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles";
+import { getCurrentUser, isAdmin } from "@/lib/auth/actions.server";
+// import { getAuthorizedUserActions } from "@/lib/auth/roles.server";
+import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles.client";
 import { NullUser } from "@/lib/auth/user";
 
 const geistSans = Geist({
@@ -51,7 +51,7 @@ export default async function RootLayout({
     appEnv === "staging" || vercelBranch === "staging";
   const shortSha = vercelSha ? vercelSha.slice(0, 7) : null;
 
-  // User auth is used all over the app, so here it is provided to the 
+  // User auth is used all over the app, so here it is drilled into the 
   // authprovider to make it available everywhere.
   const { user } = await getCurrentUser();
   const _isAdmin  = user?.role == "FAGANSVARLIG" || user?.role == "STUDENT" || user?.role == "SUPERADMIN";

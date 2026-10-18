@@ -9,6 +9,7 @@ import {
 } from "@/lib/adminNavigation";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import {
+  formatWorkerLabel,
   getDisplayNameFromEmail,
   getRoleLabel,
   getSubmissionSelect,
@@ -19,7 +20,7 @@ import {
 } from "@/lib/varroaWorkflow";
 
 import { useAuth } from "@/app/auth-provider";
-import { getClient } from "@/lib/auth/client";
+import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 import { PostgrestResponse } from "@supabase/supabase-js";
 
@@ -66,7 +67,7 @@ export function AdminQueueClient() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = useCallback(async (id: string, title: string) => {
-    console.log("handledelete: ", items.length)
+    console.log("handledelete: ", itemsUnfiltered.length)
 
     const typeOk = confirm(
       `Er du HELT sikker på at du vil slette denne saken?\n\n${title}\n\nSletting er permanent. Alle revurderinger, bilder, notater og historikk blir slettet fra databasen. Bilder i Storage må slettes manuelt om nødvendig.\n\nSkriv inn nøyaktig ordet Slett for å fortsette:`,
@@ -92,7 +93,7 @@ export function AdminQueueClient() {
         p_submission_id: id,
       });
       if (res.error) throw res.error;
-      setItems((prev) => prev.filter((x) => x.id !== id));
+      setItemsUnfiltered((prev) => prev.filter((x) => x.id !== id));
     } catch (e: unknown) {
       let msg = "Ukjent feil";
       if (typeof e === "object" && e) {
@@ -140,7 +141,7 @@ export function AdminQueueClient() {
       if (!availableRes.success) {
         console.error("Failed to fetch submissions count:", availableRes.error)
       } else {
-        const availableCount = availableRes.data ?? 0;
+        const availableCount = availableRes.data[0] ?? 0;
         setAvailableNewCount(availableCount);
         console.log("Fetched items count: ", availableNewCount)
       }
@@ -335,6 +336,7 @@ export function AdminQueueClient() {
   ];
   const ownerColumnLabel = view === "kontroll" ? "Forste sjekk" : "Tildelt";
 
+
   return (
     <div className="min-h-dvh px-4 pb-10 pt-8">
       <header className="mx-auto w-full max-w-7xl">
@@ -477,8 +479,13 @@ export function AdminQueueClient() {
                       <SubmissionListItemcard
                         key={item.id}
                         item={item}
-                        view={view}
-                        deletingID={deletingId}
+                        returnTo={`${basePath}/admin/innsendinger/?view=${view}`}
+                        assignedTo={
+                          view === "kontroll"
+                              ? formatWorkerLabel(user.user_id, item.processed_by)
+                              : formatWorkerLabel(user.user_id, item.assigned_to)
+                        }
+                        deletingID={deletingId ?? null}
                         onDelete={handleDelete} />
                     ))}
                   </div>)

@@ -1,6 +1,6 @@
 'use client';
 import { SubmitEvent } from "react";
-import { registerUser } from '@/lib/auth/actions';
+import { registerUser } from '@/lib/auth/actions.server';
 
 
 interface RegisterUserFormProps {

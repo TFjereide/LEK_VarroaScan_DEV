@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AppRole } from "./auth/roles";
+import type { AppRole } from "./auth/roles.types";
 
 export const VARROA_STATUSES = [
   "NY",

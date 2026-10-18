@@ -23,13 +23,13 @@ import {
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 
-import * as serverActions from "@/lib/auth/actions";
+import * as serverActions from "@/lib/auth/actions.server";
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";
 import { ManageUserSection } from "@/components/manageUsers/manageUsers";
 // import { fetchSubmissions } from "@/lib/varroaScanDb";
-import { getClient } from "@/lib/auth/client";
+import { getClient } from "@/lib/auth/supabase.client";
 // import { CommonHeader } from "@/components/header";
 
 

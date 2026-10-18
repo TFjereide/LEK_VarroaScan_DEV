@@ -1,4 +1,4 @@
-import { AppRole } from "./roles";
+import { AppRole } from "./roles.client";
 
 /**
  * in-app user datatype

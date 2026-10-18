@@ -4,29 +4,27 @@ import { formatDateTime, formatWorkerLabel, getStatusUi, getTypeLabel, VarroaSub
 
 interface SubmissionListItemcardParams{
     item: VarroaSubmissionRecord;
-    view: string;
-    deletingID: string|null;
+    returnTo: string;
+    assignedTo: string;
+    deletingID?: string|null;
     // returnTo :string;
-    onDelete : (id: string, title: string) => Promise<void>
+    onDelete? : ((id: string, title: string) => Promise<void>)
 }
 
 
-export function SubmissionListItemcard({item, view, deletingID, onDelete}:SubmissionListItemcardParams) {
+export function SubmissionListItemcard({item, returnTo, assignedTo, deletingID, onDelete}:SubmissionListItemcardParams) {
 
     const {user, authedActions} = useAuth();
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
     const ui = getStatusUi(item.status);
-    const assignedLabel =
-        view === "kontroll"
-            ? formatWorkerLabel(user.user_id, item.processed_by)
-            : formatWorkerLabel(user.user_id, item.assigned_to);
+
     const rowCols = authedActions.canDeleteAnything
         ? "grid-cols-1 gap-3 lg:grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px_minmax(0,1fr)] lg:items-center"
         : "grid-cols-1 gap-3 lg:grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px] lg:items-center";
     const isDeleting = deletingID === item.id;
 
-    const returnTo = encodeURIComponent(`${basePath}/admin/innsendinger/?view=${view}`)
+    // const returnTo = encodeURIComponent(`${basePath}/admin/innsendinger/?view=${view}`)
 
     return (
         <div
@@ -36,7 +34,7 @@ export function SubmissionListItemcard({item, view, deletingID, onDelete}:Submis
             <div className={`grid ${rowCols}`}>
                 <a
                     href={
-                        `${basePath}/admin/innsendinger/innsending/?id=${encodeURIComponent(item.id)}&returnto=${returnTo}`
+                        `${basePath}/admin/innsendinger/innsending/?id=${encodeURIComponent(item.id)}&returnto=${encodeURIComponent(returnTo)}`
                     }
                     className="contents"
                 >
@@ -63,7 +61,7 @@ export function SubmissionListItemcard({item, view, deletingID, onDelete}:Submis
                         </div>
                     </div>
 
-                    <div className="text-sm text-zinc-300">{assignedLabel}</div>
+                    <div className="text-sm text-zinc-300">{assignedTo}</div>
                     {/* GAMMEL: item.manual_mite_count (kolonnen finnes ikke
                               lenger - midd telles nå per bilde). NY: viser "—" her
                               i listen; det faktiske antallet ser du på
@@ -74,7 +72,7 @@ export function SubmissionListItemcard({item, view, deletingID, onDelete}:Submis
                     </div>
                     <div className="text-sm font-semibold text-amber-300">Åpne →</div>
                 </a>
-                {authedActions.canDeleteAnything ? (
+                {authedActions.canDeleteAnything && onDelete && deletingID ? (
                     <div className="mt-3 flex justify-end sm:mt-0">
                         <button
                             type="button"

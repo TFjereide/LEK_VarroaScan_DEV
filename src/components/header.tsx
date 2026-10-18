@@ -1,7 +1,7 @@
 // "use client";
 import { getAppVersion } from "@/lib/appVersion";
 import { useAuth } from "@/app/auth-provider";
-import { logOut } from "@/lib/auth/actions";
+import { logOut } from "@/lib/auth/actions.server";
 import { PropsWithChildren } from "react";
 import { useRouter } from "next/navigation";
 

@@ -1,9 +1,9 @@
 import { useState, useCallback, useContext } from "react";
 import { User } from "@/lib/auth/user";
 import { formatDateTime, getRoleLabel } from "@/lib/varroaWorkflow";
-import { getClient } from "@/lib/auth/client";
+import { getClient } from "@/lib/auth/supabase.client";
 import { useAuth } from "@/app/auth-provider";
-import { AppRole } from "@/lib/auth/roles";
+import { AppRole } from "@/lib/auth/roles.client";
 
 
 
