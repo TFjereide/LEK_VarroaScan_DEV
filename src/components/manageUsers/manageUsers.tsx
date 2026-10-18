@@ -3,7 +3,7 @@ import { User } from "@/lib/auth/user";
 import { formatDateTime, getRoleLabel } from "@/lib/varroaWorkflow";
 import { getClient } from "@/lib/auth/supabase.client";
 import { useAuth } from "@/app/auth-provider";
-import { AppRole } from "@/lib/auth/roles.client";
+import { AppRole } from "@/lib/auth/roles.types";
 
 
 
@@ -51,10 +51,10 @@ export function ManageUserSection() {
         try {
             const res = await supabase.rpc("varroa_upsert_user_role", {
             p_target_user_id: targetUserId,
-            p_new_role: opts.role ?? null,
-            p_new_expires_at: opts.expiresAt ?? null,
-            p_set_banned: opts.banned === undefined ? null : opts.banned,
-            p_unused_dummy: null,
+            p_new_role: opts.role ?? "" ,
+            p_new_expires_at: opts.expiresAt ?? "",
+            p_set_banned: opts.banned ?? false,
+            p_unused_dummy: "",
             });
 
             if (res.error) throw res.error;

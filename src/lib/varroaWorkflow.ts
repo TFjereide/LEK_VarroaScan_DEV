@@ -12,6 +12,11 @@ export const VARROA_STATUSES = [
 
 export type VarroaSubmissionStatus = (typeof VARROA_STATUSES)[number];
 
+export function isVarroaSubmissionStatus(value:string|null): value is VarroaSubmissionStatus{
+  if (!value) return false;
+  return (VARROA_STATUSES as readonly string[]).includes(value);
+}
+
 // GAMMEL: VarroaSubmissionRecord pekte på varroa_submissions (gammel
 // databasen) og hadde flere felt som enten ike finnes i den nye
 // databasen, eller som har flyttet et annet sted:

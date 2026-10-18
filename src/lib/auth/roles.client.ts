@@ -9,12 +9,11 @@
  * Additionally, the last step should ideally be logged if the user is able to attempt an action they're not authorized to do.
 */
 import { AppRole, AuthorizedUserActions } from "./roles.types";
-import { getClient } from "./supabase.server";
-import { User, NullUser } from "./user";
+import { User } from "./user";
 
 
 // FIXME: This should NOT be here at any point, ever! BOO! bad llm, boo!
-const SUPER_ADMIN_EMAILS = new Set(["richard141271@gmail.com",]);
+// const SUPER_ADMIN_EMAILS = new Set(["richard141271@gmail.com",]);
 
 function normalizeEmail(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();

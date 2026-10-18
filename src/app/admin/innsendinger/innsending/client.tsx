@@ -36,6 +36,8 @@ import {
   type VarroaSubmissionImageReview,
   type VarroaSubmissionRecord,
   type VarroaSubmissionReview,
+  VarroaSubmissionStatus,
+  isVarroaSubmissionStatus,
 } from "@/lib/varroaWorkflow";
 
 import { ZoomableAnnotatedImage } from "@/components/submissions/zoomableAnnotatedImage"
@@ -44,6 +46,7 @@ import { useAuth } from "@/app/auth-provider";
 import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
+import { Database } from "@/lib/supabase/database.types";
 
 type SaveAction =
   | "SAVE_DRAFT"
@@ -461,6 +464,10 @@ export function ProductionSubmissionClient() {
     const historyFromStatus = isImageStep ? null : item.status;
     const historyToStatus = isImageStep ? null : nextStatus;
 
+
+    type SubmissionUpdate = Database["public"]["Tables"]["submissions"]["Update"];
+
+
     // GAMMEL: updatePatch skrev manual_mite_count/quality_rating/
     // review_comment/current_role_owner samt assigned_at/processed_at/
     // approved_by/approved_at/returned_by/returned_at til submissions.
@@ -469,8 +476,8 @@ export function ProductionSubmissionClient() {
     // som kolonner lenger - "hvem/når" for statusbytter er nå raden vi
     // uansett setter inn i submission_history rett under. updatePatch
     // beholder derfor bare de kolonnene som faktisk finnes på submissions.
-    const updatePatch: Record<string, unknown> = {
-      status: nextStatus,
+    const updatePatch: SubmissionUpdate = {
+      status: isVarroaSubmissionStatus(nextStatus) ? nextStatus: "UNDER_ARBEID",
       training_ready: nextTrainingReady,
     };
 
@@ -484,7 +491,12 @@ export function ProductionSubmissionClient() {
     }
 
     setIsSaving(true);
+    const userId = authedActions.userId;
     try {
+      if (!item || !authedActions.userId || !authedActions?.role) {
+        setSaveError("Mangler tilgang eller sak.");
+        return;
+      }
       const reviewPayload = {
         submission_id: item.id,
         created_by: authedActions.userId,
@@ -543,11 +555,12 @@ export function ProductionSubmissionClient() {
       if (reviewRes.error) throw reviewRes.error;
       const reviewId = String(reviewRes.data.id);
 
+
       const imageReviewRows = draftEntries.map((draft) => ({
-        id: draft.id,
+        ...(draft.id ? { id: draft.id } : {}),
         submission_id: item.id,
         review_id: reviewId,
-        created_by: authedActions.userId,
+        created_by: userId,
         image_index: draft.imageIndex,
         mite_count:
           draft.miteCountInput.trim() === ""
@@ -558,6 +571,7 @@ export function ProductionSubmissionClient() {
         training_ready: draft.trainingReady,
         approved: approved || draft.approved,
       }));
+
       const imageReviewRes = await supabase
         .from("varroa_submission_review_images")
         .upsert(imageReviewRows, {
@@ -582,8 +596,8 @@ export function ProductionSubmissionClient() {
         submission_id: item.id,
         changed_by: authedActions.userId,
         action: historyAction,
-        from_status: historyFromStatus,
-        to_status: historyToStatus,
+        from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
+        to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
         comment: historyComment,
         payload: {
           role: authedActions?.role,
