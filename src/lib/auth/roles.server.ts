@@ -12,9 +12,9 @@ export async function getAuthorizedUserActions(user: User | null): Promise<Autho
   let role: AppRole = user.role ?? "NONE";
 
 
-  if (process.env.ACCESS_MODE_DEBUG === "true") {
-    role = "SUPERADMIN";
-  } else if (role != "NONE") {
+  // if (process.env.ACCESS_MODE_DEBUG === "true") {
+  //   role = "SUPERADMIN";
+  if (role != "NONE") {
     // Check in database for matching roles
     const supabase = await getClient();
     const roleRes = await supabase

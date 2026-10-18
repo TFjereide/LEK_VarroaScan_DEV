@@ -78,9 +78,9 @@ export async function logOut() {
  * Uses getUser() to validate the JWT token against the server.
  */
 export async function getCurrentUser(): Promise<AuthData> {
-    if (process.env.ACCESS_MODE_DEBUG === "true") {
-        return { user: TestUser, error: AppAuthError.Ok };
-    }
+    // if (process.env.ACCESS_MODE_DEBUG === "true") {
+    //     return { user: TestUser, error: AppAuthError.Ok };
+    // }
 
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
@@ -93,9 +93,9 @@ export async function getCurrentUser(): Promise<AuthData> {
  */
 export async function ensureAnonymousSession(): Promise<AuthData> {
 
-    if (process.env.ACCESS_MODE_DEBUG === "true"){
-        return {user:TestUser, error:AppAuthError.Ok};
-    }
+    // if (process.env.ACCESS_MODE_DEBUG === "true"){
+    //     return {user:TestUser, error:AppAuthError.Ok};
+    // }
     const supabase = await getClient();
 
     {
@@ -139,7 +139,7 @@ export async function updatePassword(password: string): Promise<AuthData> {
  * @returns Promise\<boolean>
  */
 export async function isAdmin(): Promise<boolean> {
-    if (process.env.ACCESS_MODE_DEBUG === "true") return true;
+    // if (process.env.ACCESS_MODE_DEBUG === "true") return true;
 
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
