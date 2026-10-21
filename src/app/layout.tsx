@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
+import { AuthProvider } from "./auth-provider";
+import { getCurrentUser} from "@/lib/auth/actions.server";
+import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles.client";
+import { NullUser } from "@/lib/auth/user";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,6 +24,7 @@ const basePath = (() => {
   if (process.env.GITHUB_PAGES === "true" && repo) return `/${repo}`;
   return "";
 })();
+
 const manifestPath = basePath
   ? `${basePath.replace(/\/$/, "")}/manifest.webmanifest`
   : "/manifest.webmanifest";
@@ -34,7 +39,7 @@ export const viewport: Viewport = {
   themeColor: "#0f172a",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -46,6 +51,12 @@ export default function RootLayout({
     appEnv === "staging" || vercelBranch === "staging";
   const shortSha = vercelSha ? vercelSha.slice(0, 7) : null;
 
+  // User auth is used all over the app, so here it is drilled into the 
+  // authprovider to make it available everywhere.
+  const { user } = await getCurrentUser();
+  const _isAdmin  = user?.role == "FAGANSVARLIG" || user?.role == "STUDENT" || user?.role == "SUPERADMIN";
+  const _authedActions  = user && user.role ? getRoleAuthorizedActions(user, user.role) : nilAuthorizedUserActions();
+
   return (
     <html
       lang="no"
@@ -53,12 +64,17 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-zinc-950 text-zinc-50">
+
         {isStaging ? (
           <div className="sticky top-0 z-50 border-b border-red-900 bg-red-600 px-4 py-2 text-center text-sm font-semibold text-white">
             STAGING (ikke ekte app){shortSha ? ` • ${shortSha}` : ""}
           </div>
         ) : null}
-        {children}
+
+        <AuthProvider user={user ? user : NullUser} authedActions={_authedActions} isAdmin={_isAdmin}>
+          {children}
+        </AuthProvider>
+
         <ServiceWorkerRegister />
       </body>
     </html>

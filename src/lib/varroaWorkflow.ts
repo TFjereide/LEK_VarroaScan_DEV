@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { AppRole } from "./auth/roles.types";
 
 export const VARROA_STATUSES = [
   "NY",
@@ -10,36 +11,67 @@ export const VARROA_STATUSES = [
 ] as const;
 
 export type VarroaSubmissionStatus = (typeof VARROA_STATUSES)[number];
-export type VarroaRole = "SUPERADMIN" | "FAGANSVARLIG" | "STUDENT";
 
+export function isVarroaSubmissionStatus(value:string|null): value is VarroaSubmissionStatus{
+  if (!value) return false;
+  return (VARROA_STATUSES as readonly string[]).includes(value);
+}
+
+// GAMMEL: VarroaSubmissionRecord pekte på varroa_submissions (gammel
+// databasen) og hadde flere felt som enten ike finnes i den nye
+// databasen, eller som har flyttet et annet sted:
+//  - user_id/user_name: fantes ikke i det hele tatt - nytt skjema tillater
+//    anonym innsending (birøkter trenger ikke logge inn).
+//  - images: var et flatt tekst-array direkte på raden. Nå er det en
+//    egen relasjon (images-tabellen) - se getSumissionImagePaths() under.
+//  - quality_rating / manual_mite_count / review_comment: lå på selve
+//    innsendingen. Disse tilhører nå enten ett bilde (images.quality,
+//    images.mite_count) eller en konkret vurdering
+//    (varroa_submission_review_images), ikke innsendingen som helhet.
+//  - assigned_at/processed_at/approved_by/approved_at/returned_by/
+//    returned_at: erstattet av submission_history (se
+//    findApprovedBy() under for hvordan vi henter "hvem godkjente").
+//  - current_role_owner / route: ble ikke lest noe sted i koden vi har
+//    gått gjennom - fjernet i stedet for å gjette et nytt hjem for dem.
+//
+// NY: samme id/type/status/assigned_to/processed_by/training_ready som
+// før (de kolonnene finnes fortsatt), pluss et par alias forklart i
+// getSubmissionSelect() under.
 export type VarroaSubmissionRecord = {
   id: string;
   created_at: string;
   updated_at: string | null;
-  user_id: string | null;
-  user_name: string | null;
   type: string;
   note: string | null;
-  images: string[];
-  source: string | null;
-  app_version: string | null;
-  route: string | null;
   status: VarroaSubmissionStatus | string;
   assigned_to: string | null;
-  assigned_at: string | null;
   processed_by: string | null;
-  processed_at: string | null;
-  approved_by: string | null;
-  approved_at: string | null;
-  returned_by: string | null;
-  returned_at: string | null;
-  quality_rating: string | null;
   training_ready: boolean;
-  manual_mite_count: number | null;
-  review_comment: string | null;
-  current_role_owner: string | null;
+  // Rå form rett fra Supabase (images er en relasjon nå, ikke et
+  // tekst-array). Bruk getSubmissionImagePaths(item) for å få et vanlig
+  // string[] med bildestier, slik resten av koden er vant til.
+  images: { image_path: string }[] | null;
 };
 
+// NY: matcher submission_history-tabellen. changed_by/changed_at er de
+// faktiske kolonnenavnene i databasen, men vi henter dem ut med alias
+// (se getHistorySelect()) slik at feltnavnene her - og dermed resten av
+// koden som leser entry.user_id / entry.created_at - kan holdes like
+// gamle VarroaSubmissionHistory for å unngå unødvendige endringer andre
+// steder.
+export type VarroaSubmissionHistory = {
+  id: string;
+  submission_id: string;
+  created_at: string;
+  user_id: string | null;
+  action: string | null;
+  from_status: VarroaSubmissionStatus | null;
+  to_status: VarroaSubmissionStatus | null;
+  comment: string | null;
+  payload: Record<string, unknown> | null;
+};
+
+// Uendret - matcher varroa_submission_reviews 1:1, ingen alias nødvendig.
 export type VarroaSubmissionReview = {
   id: string;
   submission_id: string;
@@ -55,6 +87,7 @@ export type VarroaSubmissionReview = {
   image_notes: unknown;
 };
 
+// Uendret - matcher varroa_submission_review_images 1:1.
 export type VarroaSubmissionImageReview = {
   id: string;
   submission_id: string;
@@ -68,18 +101,6 @@ export type VarroaSubmissionImageReview = {
   comment: string | null;
   training_ready: boolean;
   approved: boolean;
-};
-
-export type VarroaSubmissionHistory = {
-  id: string;
-  submission_id: string;
-  created_at: string;
-  user_id: string | null;
-  action: string;
-  from_status: VarroaSubmissionStatus | null;
-  to_status: VarroaSubmissionStatus | null;
-  comment: string | null;
-  payload: Record<string, unknown> | null;
 };
 
 export type SignedImage = {
@@ -154,7 +175,7 @@ export function getStatusUi(status: string) {
   }
 }
 
-export function getRoleLabel(role: VarroaRole | null) {
+export function getRoleLabel(role: AppRole | null) {
   switch (role) {
     case "SUPERADMIN":
       return "Superadmin";
@@ -198,7 +219,7 @@ export function getQualityOptions() {
   ];
 }
 
-export function getHistoryActionLabel(action: string) {
+export function getHistoryActionLabel(action: string | null) {
   switch (action) {
     case "CLAIMED_NEXT":
       return "Neste sak hentet";
@@ -221,10 +242,14 @@ export function getHistoryActionLabel(action: string) {
     case "ARCHIVED":
       return "Arkivert";
     default:
-      return action;
+      return action ?? "Ukjent";
   }
 }
 
+// GAMMEL: sjekket mot navn fra den gamle, ikke-migrerte databasen. Alle
+// disse tabellene/kolonnene/funksjonene finnes nå (etter de to
+// migrasjonene), men vi beholder sjekken som en defensiv sikkerhetsnett
+// i tilfelle noen kjører koden før migrasjonene er kjørt.
 export function isMissingWorkflowSchemaError(value: unknown) {
   if (!value || typeof value !== "object") return false;
   if (!("message" in value)) return false;
@@ -232,10 +257,11 @@ export function isMissingWorkflowSchemaError(value: unknown) {
   return (
     message.includes("varroa_user_roles") ||
     message.includes("varroa_submission_history") ||
+    message.includes("submission_history") ||
     message.includes("varroa_submission_reviews") ||
     message.includes("varroa_submission_review_images") ||
     message.includes("assigned_to") ||
-    message.includes("updated_at") ||
+    message.includes("training_ready") ||
     message.includes("current_image_index") ||
     message.includes("image_notes") ||
     message.includes("varroa_claim_next_submission") ||
@@ -265,6 +291,27 @@ export function formatWorkerLabel(
   return `${workerId.slice(0, 8)}...`;
 }
 
+// NY: siden "hvem godkjente" ikke lenger er en kolonne på submissions,
+// men en hendelse i historikken, leter denne gjennom historikken (nyeste
+// først) etter siste gang saken gikk til GODKJENT eller KLAR_FOR_TRENING,
+// og returnerer hvem som gjorde det. Brukes i stedet for item.approved_by.
+export function findApprovedBy(history: VarroaSubmissionHistory[]): string | null {
+  const entry = history.find(
+    (h) => h.to_status === "GODKJENT" || h.to_status === "KLAR_FOR_TRENING",
+  );
+  return entry?.user_id ?? null;
+}
+
+// NY: gjør om images-relasjonen ({image_path: string}[]) som kommer fra
+// getSubmissionSelect() til et vanlig string[] med bildestier - samme
+// form koden allerede forventet fra den gamle, flate images-kolonnen.
+export function getSubmissionImagePaths(
+  record: Pick<VarroaSubmissionRecord, "images">,
+): string[] {
+  if (!record.images) return [];
+  return record.images.map((img) => img.image_path).filter(Boolean);
+}
+
 export async function createSignedImages(
   supabase: SupabaseClient,
   imagePaths: string[],
@@ -285,32 +332,45 @@ export async function createSignedImages(
   });
 }
 
+// GAMMEL: selekterte 24 kolonner direkte fra varroa_submissions (gammel
+// database), inkludert flere felt vi ikke lenger har (se forklaringen
+// ved VarroaSubmissionRecord over).
+//
+// NY: leser fra submissions, med to alias slik at feltnavnene i resten
+// av koden (item.created_at, item.note) ikke må endres:
+//  - created_at:submission_date  (kolonnen heter submission_date i DB)
+//  - note:comment                (kolonnen heter comment i DB)
+// images hentes som en relasjon - bruk getSubmissionImagePaths() på
+// resultatet for å få et flatt string[].
 export function getSubmissionSelect() {
   return [
     "id",
-    "created_at",
+    "created_at:submission_date",
     "updated_at",
-    "user_id",
-    "user_name",
     "type",
-    "note",
-    "images",
-    "source",
-    "app_version",
-    "route",
+    "note:comment",
     "status",
     "assigned_to",
-    "assigned_at",
     "processed_by",
-    "processed_at",
-    "approved_by",
-    "approved_at",
-    "returned_by",
-    "returned_at",
-    "quality_rating",
     "training_ready",
-    "manual_mite_count",
-    "review_comment",
-    "current_role_owner",
+    "images(image_path)",
+  ].join(",");
+}
+
+// NY: samme alias-prinsipp for submission_history - beholder
+// changed_by/changed_at som de faktiske DB-kolonnene, men henter dem ut
+// som user_id/created_at slik VarroaSubmissionHistory-typen (og all kode
+// som leser den) allerede forventer.
+export function getHistorySelect() {
+  return [
+    "id",
+    "submission_id",
+    "created_at:changed_at",
+    "user_id:changed_by",
+    "action",
+    "from_status",
+    "to_status",
+    "comment",
+    "payload",
   ].join(",");
 }

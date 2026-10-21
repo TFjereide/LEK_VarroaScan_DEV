@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 // lib
 import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
-import { isVarroaAdmin } from "@/lib/varroaAdmin";
+// import { isVarroaAdmin } from "@/lib/auth/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 // NYTT: database-utility for ny database (samler queries for submissions/images)
 import { submitVarroaScan } from "@/lib/varroaScanDb";
@@ -20,11 +20,14 @@ import { TechnicalInfoPanel } from "@/components/technicalInfo";
 import { PhototypeSection } from "@/components/phototypeSection";
 import { SubmissionButtonSection } from "@/components/submissionButtonSection";
 import { AfterSubmissionSection } from "@/components/afterSubmissionSection";
+import { useAuth } from "./auth-provider";
 
 
 export default function Home() {
   const pathname = usePathname();
   const isOnline = useOnlineStatus();
+  const {user, isAdmin} = useAuth()
+
 
   const [returnMeta, setReturnMeta] = useState<{
     url: string | null;
@@ -67,10 +70,7 @@ export default function Home() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
 
-    const type = utils.normalizeType(params.get("type"));
-    if (type){
-      setSubmissionType(type);
-    }
+    setSubmissionType(utils.normalizeType(params.get("type")));
 
     setSourceParam(
       utils.normalizeSource(params.get("source"))
@@ -165,9 +165,8 @@ export default function Home() {
     const redirectIfAdmin = async (
       session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"],
     ) => {
-      if (!active || redirected || !session?.user) return;
-      const admin = await isVarroaAdmin(supabase, session);
-      if (!active || redirected || !admin) return;
+      if (!session?.user) return;
+      if (!active || redirected || !isAdmin) return;
       redirected = true;
       window.location.replace(target);
     };

@@ -8,7 +8,11 @@ const basePathCandidate =
 const basePath = basePathCandidate === "/" ? "" : basePathCandidate;
 
 const nextConfig: NextConfig = {
-  output: "export",
+  //output: "export",
+  experimental: {
+    turbopackFileSystemCacheForDev: false,
+    turbopackFileSystemCacheForBuild: false,
+  },
   trailingSlash: true,
   basePath,
   assetPrefix: basePath,

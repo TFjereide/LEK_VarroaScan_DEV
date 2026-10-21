@@ -7,34 +7,38 @@ import {
   getAdminContextSearch,
   getAdminReturnInfo,
 } from "@/lib/adminNavigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { getVarroaAccess, type VarroaAccess } from "@/lib/varroaRoles";
 import {
   formatWorkerLabel,
-  formatDateTime,
   getDisplayNameFromEmail,
   getRoleLabel,
-  getStatusUi,
   getSubmissionSelect,
-  getTypeLabel,
   getWorkflowMigrationMessage,
   isAvailableControlSubmission,
   isMissingWorkflowSchemaError,
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 
+import { useAuth } from "@/app/auth-provider";
+import { getClient } from "@/lib/auth/supabase.client";
+import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
+import { PostgrestResponse } from "@supabase/supabase-js";
+
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
 export function AdminQueueClient() {
+
   const isOnline = useOnlineStatus();
+  const { user, authedActions } = useAuth();
+
   const searchParams = useSearchParams();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  const supabase = useMemo(() => getSupabaseClient(), []);
+  const supabase = getClient();
   const adminContextSearch = useMemo(() => {
     if (typeof window === "undefined") return "";
     return getAdminContextSearch(window.location.search);
   }, []);
+
   const returnInfo = useMemo(() => {
     if (typeof window === "undefined") {
       return { href: null as string | null, label: null as string | null };
@@ -43,6 +47,7 @@ export function AdminQueueClient() {
     if (raw.href) return raw;
     return { href: null as string | null, label: null as string | null };
   }, []);
+
   const adminLoginHref = useMemo(() => {
     if (typeof window === "undefined") return `${basePath}/admin/`;
     const params = new URLSearchParams(window.location.search);
@@ -53,19 +58,17 @@ export function AdminQueueClient() {
     return `${basePath}/admin/?${params.toString()}`;
   }, [basePath]);
 
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [access, setAccess] = useState<VarroaAccess | null>(null);
-  const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
+  // const [isAuthed, setIsAuthed] = useState(false);
+  // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
+  const [itemsUnfiltered, setItemsUnfiltered] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const canDeleteSubmissions = Boolean(
-    access?.role === "SUPERADMIN" || access?.role === "FAGANSVARLIG",
-  );
-
   const handleDelete = useCallback(async (id: string, title: string) => {
+    console.log("handledelete: ", itemsUnfiltered.length)
+
     const typeOk = confirm(
       `Er du HELT sikker på at du vil slette denne saken?\n\n${title}\n\nSletting er permanent. Alle revurderinger, bilder, notater og historikk blir slettet fra databasen. Bilder i Storage må slettes manuelt om nødvendig.\n\nSkriv inn nøyaktig ordet Slett for å fortsette:`,
     );
@@ -82,6 +85,7 @@ export function AdminQueueClient() {
       return;
     }
 
+    // TODO:
     if (!supabase) return;
     setDeletingId(id);
     try {
@@ -89,7 +93,7 @@ export function AdminQueueClient() {
         p_submission_id: id,
       });
       if (res.error) throw res.error;
-      setItems((prev) => prev.filter((x) => x.id !== id));
+      setItemsUnfiltered((prev) => prev.filter((x) => x.id !== id));
     } catch (e: unknown) {
       let msg = "Ukjent feil";
       if (typeof e === "object" && e) {
@@ -108,91 +112,93 @@ export function AdminQueueClient() {
 
   const view = (searchParams.get("view") as QueueView | null) ?? "all";
 
-  const reload = useCallback(async () => {
-    setLoadError(null);
-    if (!supabase) {
-      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
-    setIsLoading(true);
+  const fetchItems = async () => {
+    console.log("Fetching items");
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const session = sessionData.session;
-      setIsAuthed(Boolean(session));
-      if (!session) {
-        setAccess(null);
-        setItems([]);
-        setAvailableNewCount(0);
-        window.location.replace(adminLoginHref);
-        return;
-      }
-
-      const nextAccess = await getVarroaAccess(supabase, session);
-      setAccess(nextAccess);
-      if (!nextAccess.role) {
-        setItems([]);
-        setAvailableNewCount(0);
-        setLoadError("Du mangler rolle i VarroaScan-produksjonen.");
-        return;
-      }
-
-      const [submissionsRes, availableRes] = await Promise.all([
+      const [submissionsResRaw, availableResRaw] = await Promise.all([
         supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select(getSubmissionSelect())
           .order("updated_at", { ascending: false })
           .limit(500),
         supabase.rpc("varroa_available_new_count"),
       ]);
 
+      console.log("submissionsResRaw:", submissionsResRaw);
+      console.log("availableResRaw:", availableResRaw);
+
+      const submissionsRes = submissionsResRaw as PostgrestResponse<VarroaSubmissionRecord>;
+      const availableRes = availableResRaw as PostgrestResponse<number>;
+
       if (submissionsRes.error) {
-        if (isMissingWorkflowSchemaError(submissionsRes.error)) {
-          setLoadError(getWorkflowMigrationMessage());
-          setItems([]);
-        } else {
-          throw submissionsRes.error;
-        }
+        console.error("Failed to fetch submissions:", submissionsRes.error);
       } else {
-        setItems((submissionsRes.data ?? []) as unknown as VarroaSubmissionRecord[]);
+        const fetchedItems = submissionsRes.data ?? [];
+        setItemsUnfiltered(fetchedItems);
+        console.log("Fetched items: ", itemsUnfiltered);
       }
 
-      if (availableRes.error) {
-        if (isMissingWorkflowSchemaError(availableRes.error)) {
-          setAvailableNewCount(0);
-        } else {
-          throw availableRes.error;
-        }
+      if (!availableRes.success) {
+        console.error("Failed to fetch submissions count:", availableRes.error)
       } else {
-        setAvailableNewCount(Number(availableRes.data ?? 0));
+        const availableCount = availableRes.data[0] ?? 0;
+        setAvailableNewCount(availableCount);
+        console.log("Fetched items count: ", availableNewCount)
       }
     } catch (e) {
+
+    }
+  }
+
+  // TODO:
+  const reload = useCallback(async () => {
+    
+    console.log("reload")
+    setLoadError(null);
+
+    if (!supabase) {
+      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      fetchItems();
+    } catch (e) {
+      console.log("hnngh")
+
       const message =
         typeof e === "object" && e && "message" in e
           ? String((e as { message?: unknown }).message)
           : "Ukjent feil";
       setLoadError(message);
-      setItems([]);
+      setItemsUnfiltered([]);
     } finally {
       setIsLoading(false);
     }
   }, [adminLoginHref, supabase]);
 
+  console.log("before useffect")
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      void reload();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [reload]);
+    console.log("useffect")
+    void fetchItems()
+  }, [])
 
+
+  // TODO:
   const openNextSubmission = async () => {
+    console.log("next submission: ", itemsUnfiltered.length)
+
     if (!supabase) return;
     setLoadError(null);
     setIsLoading(true);
     try {
-      const userId = access?.userId;
+      const userId = user?.user_id;
       if (userId) {
+        // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
+        // er en ekte kolonne, så sorteringen trengte ingen endring.
         const underWorkRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "UNDER_ARBEID")
           .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
@@ -213,13 +219,17 @@ export function AdminQueueClient() {
         }
       }
 
-      if (access?.canControl) {
+      if (authedActions?.canControl) {
+        // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+        // .select("id")-spørring på "created_at" - som bare er et alias fra
+        // getSubmissionSelect() og ikke finnes utenfor den. NY: riktig
+        // tabellnavn + sortering på den ekte kolonnen submission_date.
         const reviewRes = await supabase
-          .from("varroa_submissions")
+          .from("submissions")
           .select("id")
           .eq("status", "KLAR_FOR_KONTROLL")
           .neq("processed_by", userId ?? "")
-          .order("created_at", { ascending: true })
+          .order("submission_date", { ascending: true })
           .limit(1)
           .maybeSingle();
 
@@ -268,32 +278,32 @@ export function AdminQueueClient() {
   };
 
   const filteredItems = useMemo(() => {
-    const userId = access?.userId;
-    if (!access?.role) return [];
+    const userId = user?.user_id;
 
     if (view === "mine") {
-      return items.filter(
+      return itemsUnfiltered.filter(
         (item) => item.assigned_to === userId || item.processed_by === userId,
       );
     }
-    if (view === "kontroll") {
-      return items.filter((item) => isAvailableControlSubmission(item, userId));
+    if (authedActions.canControl && view === "kontroll") {
+      return itemsUnfiltered.filter((item) => isAvailableControlSubmission(item, userId));
     }
     if (view === "training") {
-      return items.filter(
+      return itemsUnfiltered.filter(
         (item) => item.status === "GODKJENT" || item.status === "KLAR_FOR_TRENING",
       );
     }
     if (view === "archive") {
-      return items.filter((item) => item.status === "ARKIVERT");
+      return itemsUnfiltered.filter((item) => item.status === "ARKIVERT");
     }
-    if (!access.canSeeAll) {
-      return items.filter(
+    if (!authedActions.canSeeAll) {
+      return itemsUnfiltered.filter(
         (item) => item.assigned_to === userId || item.processed_by === userId,
       );
     }
-    return items;
-  }, [access, items, view]);
+    return itemsUnfiltered;
+
+  }, [user, authedActions, itemsUnfiltered, view]);
 
   const queueTitle = useMemo(() => {
     switch (view) {
@@ -306,25 +316,26 @@ export function AdminQueueClient() {
       case "archive":
         return "Arkiv";
       default:
-        return access?.canSeeAll ? "Arbeidskø" : "Min arbeidskø";
+        return authedActions.canSeeAll ? "Arbeidskø" : "Min arbeidskø";
     }
-  }, [access?.canSeeAll, view]);
+  }, [authedActions, view]);
 
   const queueHelp =
     view === "kontroll"
       ? "Viser saker som venter pa andresjekk. Egen forstesjekk skjules her."
-      : access?.canSeeAll
+      : authedActions.canSeeAll
         ? "Full ko med filtrering for produksjonsflyten."
         : "Viser dine tildelte saker. Bruk Start arbeid for neste ledige sak.";
 
   const filterLinks: Array<{ view: QueueView; label: string }> = [
-    { view: "all", label: access?.canSeeAll ? "Alle" : "Min kø" },
+    { view: "all", label: authedActions.canSeeAll ? "Alle" : "Min kø" },
     { view: "mine", label: "Mine" },
     { view: "kontroll", label: "Venter pa kontroll" },
     { view: "training", label: "Trening" },
     { view: "archive", label: "Arkiv" },
   ];
   const ownerColumnLabel = view === "kontroll" ? "Forste sjekk" : "Tildelt";
+
 
   return (
     <div className="min-h-dvh px-4 pb-10 pt-8">
@@ -335,9 +346,9 @@ export function AdminQueueClient() {
             <div className="text-xs text-zinc-400">{queueHelp}</div>
           </div>
           <div className="hidden flex-1 text-center md:block">
-            {access?.role && access.email ? (
+            {user.role && user.email ? (
               <div className="text-sm font-medium text-amber-200/90">
-                👋 Velkommen {getDisplayNameFromEmail(access.email)} ({getRoleLabel(access.role)}), ha
+                👋 Velkommen {getDisplayNameFromEmail(user.email)} ({getRoleLabel(user.role)}), ha
                 en fin dag!
               </div>
             ) : null}
@@ -374,10 +385,10 @@ export function AdminQueueClient() {
             </button>
           </div>
         </div>
-        {access?.role && access.email ? (
+        {user.role && user.email ? (
           <div className="mt-2 text-center md:hidden">
             <div className="text-xs font-medium text-amber-200/90">
-              👋 Velkommen {getDisplayNameFromEmail(access.email)} ({getRoleLabel(access.role)})
+              👋 Velkommen {getDisplayNameFromEmail(user.email)} ({getRoleLabel(user.role)})
             </div>
           </div>
         ) : null}
@@ -390,11 +401,11 @@ export function AdminQueueClient() {
       </header>
 
       <main className="mx-auto mt-6 w-full max-w-7xl space-y-4">
-        {!isAuthed ? (
+        {/* {!isAuthed ? (
           <div className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5 text-sm text-zinc-300">
             Logg inn via `Admin` for å åpne arbeidskøen.
           </div>
-        ) : null}
+        ) : null} */}
 
         {loadError ? (
           <div className="rounded-3xl border border-red-900/60 bg-red-950/40 px-5 py-4 text-sm text-red-200">
@@ -402,7 +413,7 @@ export function AdminQueueClient() {
           </div>
         ) : null}
 
-        {access?.role ? (
+        {authedActions.canUseQueue ? (
           <>
             <section className="rounded-3xl border border-zinc-800 bg-zinc-900 p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -447,100 +458,38 @@ export function AdminQueueClient() {
             </section>
 
             <section className="overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900">
-                <div className="hidden grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px_minmax(0,1fr)] gap-3 border-b border-zinc-800 px-5 py-4 text-xs font-semibold uppercase tracking-wide text-zinc-500 lg:grid">
+              <div className="hidden grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px_minmax(0,1fr)] gap-3 border-b border-zinc-800 px-5 py-4 text-xs font-semibold uppercase tracking-wide text-zinc-500 lg:grid">
                 <div>Sak</div>
                 <div>Status</div>
-                  <div>{ownerColumnLabel}</div>
+                <div>{ownerColumnLabel}</div>
                 <div>Midd</div>
                 <div>Sist oppdatert</div>
                 <div>Åpne</div>
-                {canDeleteSubmissions ? <div className="text-right">Slett</div> : null}
+                {authedActions.canDeleteAnything ? <div className="text-right">Slett</div> : null}
               </div>
 
-              {filteredItems.length === 0 ? (
-                <div className="px-5 py-8 text-sm text-zinc-400">
-                  Ingen saker i denne visningen ennå.
-                </div>
-              ) : null}
-
-              <div className="divide-y divide-zinc-800">
-                {filteredItems.map((item) => {
-                  const ui = getStatusUi(item.status);
-                  const assignedLabel =
-                    view === "kontroll"
-                      ? formatWorkerLabel(access.userId, item.processed_by)
-                      : formatWorkerLabel(access.userId, item.assigned_to);
-                  const rowCols = canDeleteSubmissions
-                    ? "grid-cols-1 gap-3 lg:grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px_minmax(0,1fr)] lg:items-center"
-                    : "grid-cols-1 gap-3 lg:grid-cols-[1.1fr_1fr_0.8fr_0.9fr_1.1fr_110px] lg:items-center";
-                  const isDeleting = deletingId === item.id;
-                  return (
-                    <div
-                      key={item.id}
-                      className="px-5 py-4 hover:bg-zinc-950/60"
-                    >
-                      <div className={`grid ${rowCols}`}>
-                        <a
-                          href={appendAdminContext(
-                            `${basePath}/admin/innsendinger/innsending/?id=${encodeURIComponent(item.id)}`,
-                            adminContextSearch,
-                          )}
-                          className="contents"
-                        >
-                          <div>
-                            <div className="text-sm font-semibold text-zinc-50">
-                              {getTypeLabel(item.type)}
-                            </div>
-                            <div className="mt-1 text-xs text-zinc-500">
-                              Opprettet {formatDateTime(item.created_at)}
-                            </div>
-                            <div className="mt-2 line-clamp-2 text-sm text-zinc-300">
-                              {item.note || "Ingen kommentar fra innsendingen."}
-                            </div>
-                          </div>
-
-                          <div className="lg:justify-self-start">
-                            <div
-                              className={[
-                                "inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold",
-                                ui.chipClass,
-                              ].join(" ")}
-                            >
-                              {ui.label}
-                            </div>
-                          </div>
-
-                          <div className="text-sm text-zinc-300">{assignedLabel}</div>
-                          <div className="text-sm text-zinc-300">
-                            {item.manual_mite_count != null ? item.manual_mite_count : "—"}
-                          </div>
-                          <div className="text-sm text-zinc-300">
-                            {formatDateTime(item.updated_at ?? item.created_at)}
-                          </div>
-                          <div className="text-sm font-semibold text-amber-300">Åpne →</div>
-                        </a>
-                        {canDeleteSubmissions ? (
-                          <div className="mt-3 flex justify-end sm:mt-0">
-                            <button
-                              type="button"
-                              onClick={() => void handleDelete(item.id, getTypeLabel(item.type))}
-                              disabled={isDeleting || deletingId !== null}
-                              className={[
-                                "inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition",
-                                isDeleting
-                                  ? "border-red-900/70 bg-red-950/60 text-red-100"
-                                  : "border-red-900/40 bg-red-950/20 text-red-200 hover:bg-red-950/40 disabled:opacity-60",
-                              ].join(" ")}
-                            >
-                              {isDeleting ? "Sletter…" : "🗑️ Slett sak"}
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              { // Submissionlist
+                filteredItems.length === 0 ? (
+                  <div className="px-5 py-8 text-sm text-zinc-400">
+                    Ingen saker i denne visningen ennå.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-zinc-800">
+                    {filteredItems.map((item) => (
+                      <SubmissionListItemcard
+                        key={item.id}
+                        item={item}
+                        returnTo={`${basePath}/admin/innsendinger/?view=${view}`}
+                        assignedTo={
+                          view === "kontroll"
+                              ? formatWorkerLabel(user.user_id, item.processed_by)
+                              : formatWorkerLabel(user.user_id, item.assigned_to)
+                        }
+                        deletingID={deletingId ?? null}
+                        onDelete={handleDelete} />
+                    ))}
+                  </div>)
+              }
             </section>
           </>
         ) : null}

@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
 import { getAppVersion } from "@/lib/appVersion";
-import { useOnlineStatus } from "@/lib/useOnlineStatus";
-
-
+import { useAuth } from "@/app/auth-provider";
+import { logOut } from "@/lib/auth/actions.client";
+import { PropsWithChildren } from "react";
+import { useRouter } from "next/navigation";
 
 type CommonHeaderProps = {
   url: string | null;
@@ -11,18 +11,28 @@ type CommonHeaderProps = {
   isOnline: boolean;
 };
 
-export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
+export function CommonHeader({url, label, isOnline, children} : PropsWithChildren<CommonHeaderProps>){
 
     const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const appVersion = useMemo(() => getAppVersion(), []);
+    const appVersion = getAppVersion()
+    const router = useRouter()
 
     const onBack = () => {
-        if (url) return;
+        if (url) {
+          router.push(url);
+          return;
+        }
         if (window.history.length > 1) {
             window.history.back();
             return;
         }
     };
+
+    const onLogOut = () =>{
+      logOut();
+    }
+    
+    const {user, isAdmin} = useAuth();
 
     return (
     <header className="mx-auto w-full max-w-xl">
@@ -54,12 +64,30 @@ export function CommonHeader({url, label, isOnline} : CommonHeaderProps){
               <div className="text-xs text-zinc-400">v{appVersion}</div>
             </div>
           </div>
+          
+          {children}
+
+          {user.role === "NONE" ?
+          <a
+            href={`${basePath}/login`}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
+          >
+            logg inn
+          </a>
+          :<button
+            onClick={()=>onLogOut()}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
+          >
+            logg ut
+          </button>}
+          {isAdmin ?
           <a
             href={`${basePath}/admin/`}
             className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 hover:bg-zinc-800 active:opacity-90"
           >
             🎓 Admin
           </a>
+          :null}
         </div>
 
         {!isOnline ? (
