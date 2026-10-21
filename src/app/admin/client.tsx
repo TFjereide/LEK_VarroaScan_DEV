@@ -23,7 +23,7 @@ import {
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 
-import * as serverActions from "@/lib/auth/actions.server";
+import * as serverActions from "@/lib/auth/actions.client";
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";

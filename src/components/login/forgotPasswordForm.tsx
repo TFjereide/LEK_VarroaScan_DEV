@@ -1,6 +1,6 @@
 'use client';
 import { SubmitEvent, useState } from "react";
-import { AuthData, sendRecoveryEmail } from '@/lib/auth/actions.server';
+import { sendRecoveryEmail } from '@/lib/auth/actions.client';
 
 
 interface ForgotPasswordFormProps {
@@ -20,7 +20,7 @@ export function ForgotPasswordForm(props: ForgotPasswordFormProps) {
             return;
         }
         sendRecoveryEmail(email)
-            .then((authData : AuthData)=>{
+            .then((authData)=>{
                 setMsg(authData.error);
             });
     }

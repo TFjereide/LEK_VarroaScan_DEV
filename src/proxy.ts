@@ -1,9 +1,9 @@
 import { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { ensureAnonymousSession, isAdmin } from "@/lib/auth/actions.server";
+import { ensureAnonymousSession  } from "@/lib/auth/actions.server";
+import { isAdmin } from "@/lib/auth/actions.server";
 import { AppAuthError } from "./lib/auth/appAuthError";
 // import { cookies } from 'next/headers';
-
 
 export async function proxy(request: NextRequest) {
   const supabaseResponse = NextResponse.next({
@@ -12,11 +12,8 @@ export async function proxy(request: NextRequest) {
 
   const {user, error} = await ensureAnonymousSession();
   if (user == null || error !== AppAuthError.Ok) {
-    console.error("Error:" + error)
-
-    console.log("somehow can't produce even an anonymous user!");
+    console.error("Error: somehow can't produce even an anonymous user! -> " + error)
     return NextResponse.redirect(new URL('/login', request.url));
-    // return new NextResponse("403: Not authorized", { status: 403 });
   }
 
   // dobbeltsjekker admin-path. Litt rart, men ok.

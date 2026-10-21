@@ -4,73 +4,30 @@ import { getClient } from "@/lib/auth/supabase.server";
 import { type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
 import { getUserRoleExtended } from '../varroaScanDb';
+import { AuthData } from './authData';
 
-
-// All return this type:
-export type AuthData = {
-    user: User;
-    error: 'ok';
-}|{
-    user: null;
-    error: AppAuthError;
-}
 
 /**
- * Authenticates an existing user using email and password credentials.
+ * Ensures a session exists by returning the active user or creating an anonymous session.
  */
-export async function loginWithPassword(email: string, password: string): Promise<AuthData> {
+export async function ensureAnonymousSession(): Promise<AuthData> {
     const supabase = await getClient();
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-    });
+    {
+        const { data, error } = await supabase.auth.getUser()
+
+        // await supabase.auth.refreshSession();
+        if (data.user) {
+            if (error) return { user: null, error: toAppAuthError(error) };
+            return await getAppUserFromSupabaseUser();
+        }
+    }
+
+    const { data, error } = await supabase.auth.signInAnonymously()
     if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser(data.user);
+    return await getAppUserFromSupabaseUser();
 }
 
-/**
- * registers a user using email and password.
- */
-export async function registerUser(email: string, password: string): Promise<AuthData> {
-    const supabase = await getClient();
-    const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-            emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/admin/`
-        },
-    });
-    // TODO: add to varroa_user_roles
-
-
-    if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser(data.user);
-}
-
-/**
- * Signs out the currently authenticated user and clears session tokens.
- */
-export async function logOut() {
-    const supabase = await getClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    const isAnonymous = user?.is_anonymous === true;
-
-    if (isAnonymous) return;
-    await supabase.auth.signOut({ scope: "local" });
-    //redirect('/login')
-}
-
-/**
- * Server action that checks if a user is an anonymous user or not.
- * @returns Promise\<boolean>
- */
-// export async function isAnonymous(): Promise<boolean> {
-//     const supabase = await getClient();
-//     const { data: { user } } = await supabase.auth.getUser();
-//     const isAnonymous = user?.is_anonymous === true;
-//     return isAnonymous;
-// }
 
 /**
  * Fetches the currently authenticated user from Supabase auth state.
@@ -80,58 +37,12 @@ export async function getCurrentUser(): Promise<AuthData> {
     // if (process.env.ACCESS_MODE_DEBUG === "true") {
     //     return { user: TestUser, error: AppAuthError.Ok };
     // }
-
     const supabase = await getClient();
     const { data, error } = await supabase.auth.getUser();
     if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser(data.user);
+    return await getAppUserFromSupabaseUser();
 }
 
-/**
- * Ensures a session exists by returning the active user or creating an anonymous session.
- */
-export async function ensureAnonymousSession(): Promise<AuthData> {
-
-    // if (process.env.ACCESS_MODE_DEBUG === "true"){
-    //     return {user:TestUser, error:AppAuthError.Ok};
-    // }
-    const supabase = await getClient();
-
-    {
-        const { data, error } = await supabase.auth.getUser()
-
-        // await supabase.auth.refreshSession();
-        if (data.user) {
-            if (error) return { user: null, error: toAppAuthError(error) };
-            return await getAppUserFromSupabaseUser(data.user);
-        }
-    }
-
-    const { data, error } = await supabase.auth.signInAnonymously()
-    if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser(data.user);
-}
-
-
-export async function sendRecoveryEmail(email: string): Promise<AuthData> {
-    const supabase = await getClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/recovery`,
-    });
-    console.log("recovery redirectTo: ", `${process.env.NEXT_PUBLIC_SITE_URL}/recovery`);
-    return { user: null, error: toAppAuthError(error) }
-}
-
-/**
- * Server action that updates a users password
- * @param password 
- * @returns Promise\<AuthData>
- */
-export async function updatePassword(password: string): Promise<AuthData> {
-    const supabase = await getClient();
-    const { error } = await supabase.auth.updateUser({ password, });
-    return { user: null, error: toAppAuthError(error) };
-}
 
 /**
  *  Server action that checks if the current user is an admin in the system or not
@@ -146,7 +57,7 @@ export async function isAdmin(): Promise<boolean> {
     if (toAppAuthError(error) !== AppAuthError.Ok || !data.user) {
         return false
     }
-    const {user, error:aError} = await getAppUserFromSupabaseUser(data.user);
+    const {user, error:aError} = await getAppUserFromSupabaseUser();
 
     if (!user || aError !== AppAuthError.Ok){
         return false
@@ -165,12 +76,14 @@ export async function isAdmin(): Promise<boolean> {
 /** 
  * Gives you the app-specific information on a user from the supabase auth user type.
  * */
-async function getAppUserFromSupabaseUser(authUser: SupabaseUser | null): Promise<AuthData> {
+export async function getAppUserFromSupabaseUser(): Promise<AuthData> {
+
+    const supabase = await getClient();
+    const { data: { user:authUser } } = await supabase.auth.getUser();
+    
     if (authUser == null || authUser.id.length === 0)
         return { user: null, error: AppAuthError.InvalidCredentials };
 
-    console.log("getappuser: ",authUser.id)
-    const supabase = await getClient();
     const userRole = await getUserRoleExtended(supabase, authUser.id)
 
     if (!userRole) {

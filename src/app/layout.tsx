@@ -3,8 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 import { AuthProvider } from "./auth-provider";
-import { getCurrentUser, isAdmin } from "@/lib/auth/actions.server";
-// import { getAuthorizedUserActions } from "@/lib/auth/roles.server";
+import { getCurrentUser} from "@/lib/auth/actions.server";
 import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles.client";
 import { NullUser } from "@/lib/auth/user";
 
@@ -25,6 +24,7 @@ const basePath = (() => {
   if (process.env.GITHUB_PAGES === "true" && repo) return `/${repo}`;
   return "";
 })();
+
 const manifestPath = basePath
   ? `${basePath.replace(/\/$/, "")}/manifest.webmanifest`
   : "/manifest.webmanifest";

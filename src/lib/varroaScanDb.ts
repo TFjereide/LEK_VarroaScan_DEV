@@ -95,7 +95,6 @@ Promise<{
         return null;
     };
   
-    console.log("FOund something....")
   
     const dbRole =
         typeof userRes.data?.role === "string" && validRoles.includes(userRes.data.role as AppRole )
