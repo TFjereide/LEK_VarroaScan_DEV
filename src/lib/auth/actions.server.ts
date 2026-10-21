@@ -7,6 +7,9 @@ import { getUserRoleExtended } from '../varroaScanDb';
 import { AuthData } from './authData';
 
 
+// TODO: https://supabase.com/docs/guides/api/custom-claims-and-role-based-access-control-rbac
+
+
 /**
  * Ensures a session exists by returning the active user or creating an anonymous session.
  */
