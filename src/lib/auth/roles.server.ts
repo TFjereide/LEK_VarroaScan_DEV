@@ -3,7 +3,7 @@ import { getUserRole } from "../varroaScanDb";
 import { getRoleAuthorizedActions} from "./roles.client";
 import { AppRole, AuthorizedUserActions } from "./roles.types";
 import { getClient } from "./supabase.server";
-import { User, NullUser } from "./user";
+import { User, createNullUser } from "./user";
 
 
 /**
@@ -19,7 +19,7 @@ fall back to NullUser.
 NOTE: Users with a role of "NONE" skip the database role check entirely. */
 export async function getAuthorizedUserActions(user: User | null): Promise<AuthorizedUserActions> {
   if (!user) {
-    user = NullUser;
+    user = createNullUser();
   }
 
   let role: AppRole = user.role ?? "NONE";
