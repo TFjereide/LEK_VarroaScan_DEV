@@ -41,6 +41,15 @@ export function nilAuthorizedUserActions():AuthorizedUserActions {
 }
 
 
+export function isAdmin(role: AppRole | null):boolean{
+  if (role === null){
+    return false;
+  }
+  return (
+    role == "FAGANSVARLIG" || role == "STUDENT" || role == "SUPERADMIN"
+  )
+}
+
 export function getRoleAuthorizedActions( user: User, role: AppRole): AuthorizedUserActions{
 
     switch (role) {

@@ -3,9 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "./sw-register";
 import { AuthProvider } from "./auth-provider";
-import { getCurrentUser} from "@/lib/auth/actions.server";
-import { getRoleAuthorizedActions, nilAuthorizedUserActions } from "@/lib/auth/roles.client";
-import { NullUser } from "@/lib/auth/user";
+import { ensureAnonymousSession } from "@/lib/auth/actions.server";
+import { createNullUser } from "@/lib/auth/user";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -51,11 +50,7 @@ export default async function RootLayout({
     appEnv === "staging" || vercelBranch === "staging";
   const shortSha = vercelSha ? vercelSha.slice(0, 7) : null;
 
-  // User auth is used all over the app, so here it is drilled into the 
-  // authprovider to make it available everywhere.
-  const { user } = await getCurrentUser();
-  const _isAdmin  = user?.role == "FAGANSVARLIG" || user?.role == "STUDENT" || user?.role == "SUPERADMIN";
-  const _authedActions  = user && user.role ? getRoleAuthorizedActions(user, user.role) : nilAuthorizedUserActions();
+  const {user} = await ensureAnonymousSession();
 
   return (
     <html
@@ -71,7 +66,7 @@ export default async function RootLayout({
           </div>
         ) : null}
 
-        <AuthProvider user={user ? user : NullUser} authedActions={_authedActions} isAdmin={_isAdmin}>
+        <AuthProvider initialUser={user ?? createNullUser()}>
           {children}
         </AuthProvider>
 

@@ -15,10 +15,8 @@ import { AuthData } from './authData';
  */
 export async function ensureAnonymousSession(): Promise<AuthData> {
     const supabase = await getClient();
-
     {
         const { data, error } = await supabase.auth.getUser()
-
         // await supabase.auth.refreshSession();
         if (data.user) {
             if (error) return { user: null, error: toAppAuthError(error) };
@@ -26,7 +24,7 @@ export async function ensureAnonymousSession(): Promise<AuthData> {
         }
     }
 
-    const { data, error } = await supabase.auth.signInAnonymously()
+    const {error } = await supabase.auth.signInAnonymously()
     if (error) return { user: null, error: toAppAuthError(error) };
     return await getAppUserFromSupabaseUser();
 }
@@ -37,12 +35,6 @@ export async function ensureAnonymousSession(): Promise<AuthData> {
  * Uses getUser() to validate the JWT token against the server.
  */
 export async function getCurrentUser(): Promise<AuthData> {
-    // if (process.env.ACCESS_MODE_DEBUG === "true") {
-    //     return { user: TestUser, error: AppAuthError.Ok };
-    // }
-    const supabase = await getClient();
-    const { data, error } = await supabase.auth.getUser();
-    if (error) return { user: null, error: toAppAuthError(error) };
     return await getAppUserFromSupabaseUser();
 }
 
@@ -51,36 +43,35 @@ export async function getCurrentUser(): Promise<AuthData> {
  *  Server action that checks if the current user is an admin in the system or not
  * @returns Promise\<boolean>
  */
-export async function isAdmin(): Promise<boolean> {
-    // if (process.env.ACCESS_MODE_DEBUG === "true") return true;
+// export async function isAdmin(): Promise<boolean> {
+//     // if (process.env.ACCESS_MODE_DEBUG === "true") return true;
 
-    const supabase = await getClient();
-    const { data, error } = await supabase.auth.getUser();
+//     const supabase = await getClient();
+//     const { data, error } = await supabase.auth.getUser();
 
-    if (toAppAuthError(error) !== AppAuthError.Ok || !data.user) {
-        return false
-    }
-    const {user, error:aError} = await getAppUserFromSupabaseUser();
+//     if (toAppAuthError(error) !== AppAuthError.Ok || !data.user) {
+//         return false
+//     }
+//     const {user, error:aError} = await getAppUserFromSupabaseUser();
 
-    if (!user || aError !== AppAuthError.Ok){
-        return false
-    }
+//     if (!user || aError !== AppAuthError.Ok){
+//         return false
+//     }
 
 
-    if( user.role === "FAGANSVARLIG" || user.role === "STUDENT" || user.role === "SUPERADMIN"){
-        return true
-    }
+//     if( user.role === "FAGANSVARLIG" || user.role === "STUDENT" || user.role === "SUPERADMIN"){
+//         return true
+//     }
 
-    // NOTE: Burde sjekke om brukeren eksisterer ellers også...
-    return false;
-}
+//     // NOTE: Burde sjekke om brukeren eksisterer ellers også...
+//     return false;
+// }
 
 
 /** 
  * Gives you the app-specific information on a user from the supabase auth user type.
  * */
 export async function getAppUserFromSupabaseUser(): Promise<AuthData> {
-
     const supabase = await getClient();
     const { data: { user:authUser } } = await supabase.auth.getUser();
     
