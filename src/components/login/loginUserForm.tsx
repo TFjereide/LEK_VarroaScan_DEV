@@ -27,7 +27,6 @@ export function LoginUserForm(props: LoginUserFormProps) {
                 props.setMsg("Error: " + data.error);
             }else{
                 router.push(`${process.env.NEXT_PUBLIC_SITE_URL}/admin`)
-                console.log("What?")
             }
         });
 

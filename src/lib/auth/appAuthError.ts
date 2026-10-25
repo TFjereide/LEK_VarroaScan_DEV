@@ -48,7 +48,7 @@ export function toAppAuthError(error: AuthError|null): AppAuthError {
   if (!error){
       return AppAuthError.Ok;   
   }
-  console.error("Internal error: ", error)
+  console.error("toAppAuthError: ", error)
 
   switch (error.code) {
     // Account already exists

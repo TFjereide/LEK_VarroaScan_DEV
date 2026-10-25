@@ -23,7 +23,7 @@ import {
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 
-import * as serverActions from "@/lib/auth/actions.client";
+import * as actions from "@/lib/auth/actions.client";
 
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";
@@ -103,40 +103,9 @@ export function AdminPageClient() {
     window.location.replace(base);
   }, [basePath, preservedContextForLogin]);
 
-  // const supabase = useMemo(() => getSupabaseClient(), []);
-  // const [email, setEmail] = useState("");
-  // const [password, setPassword] = useState("");
-  // const [confirmPassword, setConfirmPassword] = useState("");
-  // const [authMode, setAuthMode] = useState<
-  //   | "login"
-  //   | "register"
-  //   | "forgot"
-  //   | "recovery"
-  // >(() => {
-  //   if (typeof window === "undefined") return "login";
-  //   const hash = window.location.hash.replace(/^#/, "");
-  //   if (!hash) return "login";
-  //   const params = new URLSearchParams(hash);
-  //   return params.get("type") === "recovery" ? "recovery" : "login";
-  // });
   const [actionMsg, setActionMsg] = useState<string | null>(null);
-  // const [authInfo, setAuthInfo] = useState<string | null>(() => {
-  //   if (typeof window === "undefined") return null;
-  //   const hash = window.location.hash.replace(/^#/, "");
-  //   if (!hash) return null;
-  //   const params = new URLSearchParams(hash);
-  //   return params.get("type") === "recovery"
-  //     ? "Du kom fra en lenke for å tilbakestille passord. Skriv inn et nytt passord under, så lagrer vi det."
-  //     : null;
-  // });
-  // const [authError, setAuthError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // const [isAuthed, setIsAuthed] = useState(false);
-
-
-  // TODO: (TGF) move access into context. It's used a lot.
-  // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [items, setItems] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
@@ -523,7 +492,7 @@ export function AdminPageClient() {
 
   const router = useRouter();
   const signOut = async () => {
-    await serverActions.logOut()
+    await actions.logOut()
     router.push("/login")
   };
 
