@@ -1,6 +1,19 @@
 import type { PostgrestResponse, SupabaseClient } from "@supabase/supabase-js";
 import { AppRole, validRoles } from "./auth/roles.types";
-import { VarroaSubmissionRecord } from "./varroaWorkflow";
+import { getSubmissionSelect, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "./varroaWorkflow";
+
+
+
+// (TGF)TODO: 
+// 1. Det er flere funksjoner som gjør _nesten_ samme ting, som ikke er bra.
+//    De burde egentlig være én prosedyre som gjør det samme overalt.
+//    eks: fetchSubmissionById og getSubmissionById
+//    Det er også en del logikk som er stykket opp i mange spørringer, og
+//    det er ganske tregt å utføre, og kan føre til merkelige feil i teorien.
+//    (Typ, du finner en innsending, men ikke tilhørende bilder...)
+// 2. Bedre måte å rapportere feil gjennom dette API-et
+// 2. Formalisere og parameterisere API-et.
+
 
 /**
  * Database-utility for LEK-VarroaScan (ny database).
@@ -175,6 +188,7 @@ export async function fetchSubmissions(
   limit = 200,
 ): Promise<VarroaSubmissionRecord[]> {
 
+  // TODO: Pretty awful, but can be fixed later
   const local_Select =[
     "id",
     "created_at:submission_date",
@@ -211,6 +225,22 @@ export async function fetchSubmissions(
     }
 }
 
+export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient): Promise<number>{
+  try{
+    const availableResRaw = await supabase.rpc("varroa_available_new_count");
+    const availableRes = availableResRaw as PostgrestResponse<number>;
+    if(availableRes.error){
+      throw availableRes.error
+    }
+    const availableCount = availableRes.data[0] ?? 0;
+    return availableCount;
+  }catch (e){
+    console.error("Can't get available new submissions count.")
+  }
+  return -1;
+}
+
+
 /** Admin-oversikt: alle innsendinger, nyeste først. */
 export async function fetchSubmissionsWithImages(
   supabase: SupabaseClient,
@@ -231,22 +261,28 @@ export async function fetchSubmissionById(
   supabase: SupabaseClient,
   id: string,
 ): Promise<SubmissionWithImages | null> {
-  const res = await supabase
-    .from("submissions")
-    .select(SUBMISSION_SELECT)
-    .eq("id", id)
-    .maybeSingle();
+  try{
+    const res = await supabase
+      .from("submissions")
+      .select(SUBMISSION_SELECT)
+      .eq("id", id)
+      .maybeSingle();
+  
+    if (res.error) throw res.error;
+    if (!res.data) return null;
+  
+    const row = res.data as unknown as SubmissionWithImages;
+    // Nøstede rader har ikke garantert rekkefølge uten explicit order på
+    // relasjonen, så vi sorterer på created_at her i stedet.
+    const sortedImages = [...row.images].sort((a, b) =>
+      a.created_at.localeCompare(b.created_at),
+    );
+    return { ...row, images: sortedImages };
 
-  if (res.error) throw res.error;
-  if (!res.data) return null;
+  }catch (e){
 
-  const row = res.data as unknown as SubmissionWithImages;
-  // Nøstede rader har ikke garantert rekkefølge uten explicit order på
-  // relasjonen, så vi sorterer på created_at her i stedet.
-  const sortedImages = [...row.images].sort((a, b) =>
-    a.created_at.localeCompare(b.created_at),
-  );
-  return { ...row, images: sortedImages };
+  }
+  return null;
 }
 
 export async function updateSubmissionStatus(
@@ -362,4 +398,168 @@ export async function submitVarroaScan(
   }
 
   return { submissionId, imagePaths };
+}
+
+export async function getNextsubmissionId(supabase :SupabaseClient, userId:string){
+
+  if(userId){
+    // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
+    // er en ekte kolonne, så sorteringen trengte ingen endring.
+      
+    const underWorkRes = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("status", "UNDER_ARBEID")
+      .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
+      .order("updated_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+  
+    if (underWorkRes.error) throw underWorkRes.error;
+    const resumeId = String(underWorkRes.data?.id ?? "");
+    return resumeId;
+  }
+
+}
+
+export async function getNextsubmissionForControlId(supabase :SupabaseClient, userId:string){
+  // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+  // .select("id")-spørring på "created_at" - som bare er et alias fra
+  // getSubmissionSelect() og ikke finnes utenfor den. NY: riktig
+  // tabellnavn + sortering på den ekte kolonnen submission_date.
+   const reviewRes = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("status", "KLAR_FOR_KONTROLL")
+      .neq("processed_by", userId ?? "")
+      .order("submission_date", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (reviewRes.error) throw reviewRes.error;
+    const reviewId = String(reviewRes.data?.id ?? "");
+
+    return reviewId;
+}
+
+export async function getSubmissionById(supabase:SupabaseClient, id:string): Promise<VarroaSubmissionRecord | null>{
+
+  try{
+    const submissionsRes = await supabase
+      .from("submissions")
+      .select(getSubmissionSelect())
+      .eq("id", id)
+      .maybeSingle()
+
+      if (submissionsRes.error) {
+        // TODO: investigate this former way of doing things:
+        // if (isMissingWorkflowSchemaError(submissionsRes.error)) {
+        //   setLoadError(getWorkflowMigrationMessage());
+        //   return;
+        // }
+        throw submissionsRes.error;
+      }
+      if (submissionsRes.data === null){
+        return null;
+      }
+      const submission = (submissionsRes.data) as unknown as VarroaSubmissionRecord;
+      return submission;
+  }catch(e){
+    console.error("Couldn't get submission ", e);
+  }
+  return null;
+}
+
+export async function getSubmissionHistoryById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionHistory[]>{
+
+  const historySelect = [
+    "id",
+    "submission_id",
+    "created_at:changed_at",
+    "user_id:changed_by",
+    "action",
+    "from_status",
+    "to_status",
+    "comment",
+    "payload",
+  ].join(",");
+
+  try{
+  const historyRes = await  supabase
+    .from("submission_history")
+    .select(historySelect)
+    .eq("submission_id", id)
+    .order("changed_at", { ascending: false })
+    .limit(40)
+    if (historyRes.error) {
+      // TODO: investigate this former way of doing things:
+      // if (isMissingWorkflowSchemaError(historyRes.error)) {
+      //   setLoadError(getWorkflowMigrationMessage());
+      //   return;
+      // }
+      throw historyRes.error;
+    }
+    
+    const loadedHistory = (historyRes.data ?? []) as unknown as VarroaSubmissionHistory[];
+    return loadedHistory;
+  } catch (e){
+    console.error("Couldn't get submission history", e);
+  }
+  return [];
+}
+
+export async function getSubmissionReviewsById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionReview[]>{
+
+  try{
+    const reviewsRes = await supabase
+          .from("varroa_submission_reviews")
+          .select(
+            "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
+          )
+          .eq("submission_id", id)
+          .order("updated_at", { ascending: false })
+          .limit(20)
+
+    if (reviewsRes.error) {
+        // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
+        //   setLoadError(getWorkflowMigrationMessage());
+        //   return;
+        // }
+        throw reviewsRes.error;
+    }
+    const loadedReviews = (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
+    return loadedReviews;
+      
+  }catch (e){
+    console.error("Couldn't get submission review images", e);
+  }
+  return [];
+}
+
+export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionImageReview[]>{
+
+  try{
+    const imageReviewsRes = await supabase
+      .from("varroa_submission_review_images")
+      .select(
+        "id,submission_id,review_id,created_at,updated_at,created_by,image_index,mite_count,image_quality,comment,training_ready,approved",
+      )
+      .eq("submission_id", id)
+      // NOTE: FUngerte etter at jeg tok dette vekk. Det virker ikke som om det
+      // burde være her heller?
+      // .eq("created_by", authedActions.userId)
+      .order("image_index", { ascending: true })
+      if (imageReviewsRes.error) {
+        // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
+        //   setLoadError(getWorkflowMigrationMessage());
+        //   return;
+        // }
+        throw imageReviewsRes.error;
+      }
+      const loadedImageReviews = (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
+      return loadedImageReviews;
+  }catch (e){
+    console.error("Couldn't get submission review images", e);
+  }
+  return [];
 }
