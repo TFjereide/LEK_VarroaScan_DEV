@@ -50,6 +50,11 @@ export function isAdmin(role: AppRole | null):boolean{
   )
 }
 
+
+/** Gets the actions that a particular role is authorized to have.
+ * NOTE: user is only here as a param since there's a double amount of info in the
+ * AppRole structure: email, userid etc. This should be changed at some point
+ */
 export function getRoleAuthorizedActions( user: User, role: AppRole): AuthorizedUserActions{
 
     switch (role) {
