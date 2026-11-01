@@ -1,5 +1,4 @@
 import type { PostgrestResponse, SupabaseClient } from "@supabase/supabase-js";
-import { AppRole, validRoles } from "./auth/roles.types";
 import { getSubmissionSelect, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "./varroaWorkflow";
 
 
@@ -16,7 +15,7 @@ import { getSubmissionSelect, VarroaSubmissionHistory, VarroaSubmissionImageRevi
 
 
 /**
- * Database-utility for LEK-VarroaScan (ny database).
+ * -utility for LEK-VarroaScan (ny database).
  *
  * All Supabase-tilgang for submissions/images samles her, slik at:
  *  - app/page.tsx (birøkter-skjemaet)
@@ -32,115 +31,6 @@ import { getSubmissionSelect, VarroaSubmissionHistory, VarroaSubmissionImageRevi
  *  - oppretter storage-bucket "varroa-submissions" + RLS-policies
  */
 
-/**
- * Retrieves a user's application role from the database, checking for
- * superadmin status separately.
- *
- * @param supabase - The Supabase client used to query role assignments.
- * @param user_id - The ID of the user whose role to retrieve.
- * @returns The user's valid application role, "SUPERADMIN" if they are an
- * admin, or "NONE" if no valid role is found or an error occurs.
- */
-export async function getUserRole(supabase: SupabaseClient, user_id: string): Promise<AppRole> {
-
-  try{
-    // Check in database for matching roles
-    const roleRes = await supabase
-      .from("varroa_user_roles")
-      .select("role, expires_at, banned_at, created_at")
-      .eq("user_id", user_id)
-      .maybeSingle();
-
-    if (!roleRes.success) {
-      console.error(roleRes.error.message);
-      return "NONE"
-    }
-
-    const dbRole =
-      typeof roleRes.data?.role === "string" && 
-      validRoles.includes(roleRes.data.role as AppRole)
-        ? (roleRes.data.role as AppRole)
-        : "NONE";
-
-    // FIXME: this should be in the user_roles table, not here.
-    // sort of a second pass to find out if someone is an "admin", which isn't a role?
-    // I guess it'll be a "SUPERADMIN" for now
-    const adminRes = await supabase
-      .from("varroa_admins")
-      .select("user_id")
-      .eq("user_id", user_id)
-      .maybeSingle();
-
-    if (adminRes.error) {
-      console.error(adminRes.error)
-    }
-
-    if (adminRes.data?.user_id) {
-      return "SUPERADMIN";
-    }
-
-    return dbRole;
-
-  }catch(e){
-    console.log("supabase error");
-  }
-  return "NONE"
-}
-
-export async function getUserRoleExtended(supabase: SupabaseClient, user_id: string): 
-Promise<{
-    role: AppRole;
-    expires_at: string | null;
-    created_at: string | null;
-    banned_at: string | null;
-} | null> 
-{
-
-  try{
-
-    const userRes = await supabase
-            .from("varroa_user_roles")
-            .select("role, expires_at, banned_at, created_at")
-            .eq("user_id", user_id)
-            .maybeSingle();
-    
-    if (!userRes.success) {
-        return null;
-    };
-  
-  
-    const dbRole =
-        typeof userRes.data?.role === "string" && validRoles.includes(userRes.data.role as AppRole )
-            ? (userRes.data.role as AppRole)
-            : "NONE";
-  
-    const dbExpiresAt =
-        typeof userRes.data?.expires_at === "string"
-            ? userRes.data?.expires_at as string
-            : null;
-  
-    const dbCreatedAt =
-        typeof userRes.data?.created_at === "string"
-            ? userRes.data?.created_at as string
-            : null;
-  
-    const dbBannedAt =
-        typeof userRes.data?.banned_at === "string"
-            ? userRes.data?.banned_at as string
-            : null;
-  
-    return {
-      role: dbRole, 
-      expires_at:dbExpiresAt,
-      created_at:dbCreatedAt,
-      banned_at:dbBannedAt,
-    }  
-  }catch (e){
-    return null
-  }
-}
-
-
 export const SUBMISSIONS_BUCKET = "varroa-submissions";
 
 export type ImageQuality = "Høy" | "Middels" | "Lav" | "ikke_vurdert";
@@ -149,7 +39,7 @@ export type SubmissionStatus = "NY" | "UNDER_ARBEID" | "ARKIVERT";
 export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
 //beskriver formen på dataene i databasen
-export type SubmissionImageRow = {
+type SubmissionImageRow = {
   image_id: string;
   submission_id: string;
   image_path: string;
@@ -161,62 +51,37 @@ export type SubmissionImageRow = {
   created_at: string;
 };
 
-//beskriver formen på dataene i databasen
-export type SubmissionRow = {
-  id: string;
-  submission_date: string;
-  source: string | null;
-  device_info: Record<string, unknown> | null;
-  app_version: string | null;
-  comment: string | null;
-  status: SubmissionStatus;
-  type: SubmissionType;
-};
-
-export type SubmissionWithImages = SubmissionRow & {
-  images: SubmissionImageRow[];
-};
+// Dunno if meta-data is used, but this is mostly for later.
+export type ImageRecord = Omit<SubmissionImageRow, "meta_data">
 
 //Henter data fra databasen 
-const SUBMISSION_SELECT =
-  "id, submission_date, source, device_info, app_version, comment, status, type, " +
-  "images(image_id, submission_id, image_path, quality, notes, image_status, meta_data, mite_count, created_at)";
+// const SUBMISSION_SELECT =
+//   "id, submission_date, source, device_info, app_version, comment, status, type, " +
+//   "images(image_id, submission_id, image_path, quality, notes, image_status, meta_data, mite_count, created_at)";
+const SUBMISSION_SELECT = [
+    "*",
+    "images(*)",
+  ].join(",");
 
 /** Admin-oversikt: alle innsendinger, nyeste først. */
-export async function fetchSubmissions(
+export async function getSubmissions(
   supabase: SupabaseClient,
   limit = 200,
 ): Promise<VarroaSubmissionRecord[]> {
 
-  // TODO: Pretty awful, but can be fixed later
-  const local_Select =[
-    "id",
-    "created_at:submission_date",
-    "updated_at",
-    "type",
-    "note:comment",
-    "status",
-    "assigned_to",
-    "processed_by",
-    "training_ready",
-    "images(image_path)",
-  ].join(",");
-
    try {
-      const submissionsResRaw = await 
-        supabase
+      const submissionsResRaw = await supabase
           .from("submissions")
-          .select(local_Select)
+          .select(SUBMISSION_SELECT)
           .order("updated_at", { ascending: false })
           .limit(500)
 
-      const submissionsRes = submissionsResRaw as PostgrestResponse<VarroaSubmissionRecord>;
-
-      if (submissionsRes.error) {
-        console.error("Failed to fetch submissions:", submissionsRes.error);
-        return [];
+      if (submissionsResRaw.error) {
+          console.error("Failed to fetch submissions:", submissionsResRaw.error);
+          return [];
       } else {
-        const fetchedItems = submissionsRes.data ?? [];
+        
+        const fetchedItems = (submissionsResRaw.data ?? []) as unknown as VarroaSubmissionRecord[];
         return fetchedItems
       }
 
@@ -241,26 +106,11 @@ export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient):
 }
 
 
-/** Admin-oversikt: alle innsendinger, nyeste først. */
-export async function fetchSubmissionsWithImages(
-  supabase: SupabaseClient,
-  limit = 200,
-): Promise<SubmissionWithImages[]> {
-  const res = await supabase
-    .from("submissions")
-    .select(SUBMISSION_SELECT)
-    .order("submission_date", { ascending: false })
-    .limit(limit);
-
-  if (res.error) throw res.error;
-  return (res.data ?? []) as unknown as SubmissionWithImages[];
-}
-
 /** Admin-detalj: én innsending med alle bilder, sortert i riktig rekkefølge. */
-export async function fetchSubmissionById(
+export async function getSubmissionById(
   supabase: SupabaseClient,
   id: string,
-): Promise<SubmissionWithImages | null> {
+): Promise<VarroaSubmissionRecord | null> {
   try{
     const res = await supabase
       .from("submissions")
@@ -271,16 +121,18 @@ export async function fetchSubmissionById(
     if (res.error) throw res.error;
     if (!res.data) return null;
   
-    const row = res.data as unknown as SubmissionWithImages;
+    const submission = res.data as unknown as VarroaSubmissionRecord;
+    if (!submission.images){
+      return submission;
+    }
     // Nøstede rader har ikke garantert rekkefølge uten explicit order på
     // relasjonen, så vi sorterer på created_at her i stedet.
-    const sortedImages = [...row.images].sort((a, b) =>
+    const sortedImages = [...submission.images].sort((a, b) =>
       a.created_at.localeCompare(b.created_at),
     );
-    return { ...row, images: sortedImages };
-
+    return { ...submission, images: sortedImages };
   }catch (e){
-
+    console.error("Couldn't get submission ", e);
   }
   return null;
 }
@@ -442,33 +294,6 @@ export async function getNextsubmissionForControlId(supabase :SupabaseClient, us
     return reviewId;
 }
 
-export async function getSubmissionById(supabase:SupabaseClient, id:string): Promise<VarroaSubmissionRecord | null>{
-
-  try{
-    const submissionsRes = await supabase
-      .from("submissions")
-      .select(getSubmissionSelect())
-      .eq("id", id)
-      .maybeSingle()
-
-      if (submissionsRes.error) {
-        // TODO: investigate this former way of doing things:
-        // if (isMissingWorkflowSchemaError(submissionsRes.error)) {
-        //   setLoadError(getWorkflowMigrationMessage());
-        //   return;
-        // }
-        throw submissionsRes.error;
-      }
-      if (submissionsRes.data === null){
-        return null;
-      }
-      const submission = (submissionsRes.data) as unknown as VarroaSubmissionRecord;
-      return submission;
-  }catch(e){
-    console.error("Couldn't get submission ", e);
-  }
-  return null;
-}
 
 export async function getSubmissionHistoryById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionHistory[]>{
 

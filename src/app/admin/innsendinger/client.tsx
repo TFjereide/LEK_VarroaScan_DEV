@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider";
 import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 import { PostgrestResponse } from "@supabase/supabase-js";
-import { fetchSubmissions, getAvailableNewSubmissionsCount, getNextsubmissionForControlId, getNextsubmissionId } from "@/lib/varroaScanDb";
+import { getSubmissions, getAvailableNewSubmissionsCount, getNextsubmissionForControlId, getNextsubmissionId } from "@/lib/varroaScanDb";
 
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
@@ -115,7 +115,7 @@ export function AdminQueueClient() {
   const fetchItems = async () => {
     console.log("Fetching items");
     const [submissionsRes, availableCountRes] = await Promise.all([
-      fetchSubmissions(supabase),
+      getSubmissions(supabase),
       getAvailableNewSubmissionsCount(supabase)
     ]);
     setAvailableNewCount(availableCountRes);

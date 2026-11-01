@@ -2,7 +2,7 @@ import { type User as SupabaseUser } from '@supabase/auth-js';
 import { getClient } from "@/lib/auth/supabase.client";
 import { type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
-import { getUserRoleExtended } from '../varroaScanDb';
+import { getUserRoleExtended } from '../varroaUserDb';
 import { AuthData } from './authData';
 import { getAppUserFromSupabaseUser } from './actions.server';
 

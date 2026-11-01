@@ -47,7 +47,7 @@ import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 import { Database } from "@/lib/supabase/database.types";
-import { fetchSubmissionById, getSubmissionById, getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "@/lib/varroaScanDb";
+import { getSubmissionById, getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "@/lib/varroaScanDb";
 
 type SaveAction =
   | "SAVE_DRAFT"
@@ -149,25 +149,6 @@ export function ProductionSubmissionClient() {
 
     setIsLoading(true);
     try {
-      // const { data: sessionData } = await supabase.auth.getSession();
-      // const session = sessionData.session;
-      // setIsAuthed(Boolean(session));
-      // if (!session) {
-      // setAccess(null);
-      // setItem(null);
-      // setImages([]);
-      // window.location.replace(adminLoginHref);
-      // return;
-      // }
-
-      // const nextAccess = await getAuthorizedUserActions(supabase, session);
-      // setAccess(nextAccess);
-      // if (!nextAccess.role) {
-      //   setItem(null);
-      //   setImages([]);
-      //   setLoadError("Du mangler rolle i VarroaScan-produksjonen.");
-      //   return;
-      // }
 
       // GAMMEL: leste fra varroa_submissions og varroa_submission_history
       // (gamle databasen, finnes ikke lenger). NY: submissions/
@@ -182,86 +163,10 @@ export function ProductionSubmissionClient() {
         getSubmissionReviewImagesById(supabase, id),
       ]);
 
-      // const [submissionRes, reviewsRes, historyRes, imageReviewsRes] = await Promise.all([
-      //   supabase
-      //     .from("submissions")
-      //     .select(getSubmissionSelect())
-      //     .eq("id", id)
-      //     .maybeSingle(),
-      //   supabase
-      //     .from("varroa_submission_reviews")
-      //     .select(
-      //       "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
-      //     )
-      //     .eq("submission_id", id)
-      //     .order("updated_at", { ascending: false })
-      //     .limit(20),
-      //   supabase
-      //     .from("submission_history")
-      //     .select(getHistorySelect())
-      //     .eq("submission_id", id)
-      //     .order("changed_at", { ascending: false })
-      //     .limit(40),
-      //   supabase
-      //     .from("varroa_submission_review_images")
-      //     .select(
-      //       "id,submission_id,review_id,created_at,updated_at,created_by,image_index,mite_count,image_quality,comment,training_ready,approved",
-      //     )
-      //     .eq("submission_id", id)
-      //     // NOTE: FUngerte etter at jeg tok dette vekk. Det virker ikke som om det
-      //     // burde være her heller?
-      //     // .eq("created_by", authedActions.userId)
-      //     .order("image_index", { ascending: true }),
-      // ]);
-
-      // if (submissionRes.error) {
-      //   if (isMissingWorkflowSchemaError(submissionRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw submissionRes.error;
-      // }
-      // if (!submissionRes.data) {
-      //   setLoadError("Fant ikke saken.");
-      //   setItem(null);
-      //   setImages([]);
-      //   return;
-      // }
-      // if (reviewsRes.error) {
-      //   if (isMissingWorkflowSchemaError(reviewsRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw reviewsRes.error;
-      // }
-      // if (historyRes.error) {
-      //   if (isMissingWorkflowSchemaError(historyRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw historyRes.error;
-      // }
-      // if (imageReviewsRes.error) {
-      //   if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw imageReviewsRes.error;
-      // }
-
-
-      // const loaded = submissionRes.data as unknown as VarroaSubmissionRecord;
-      // const loadedReviews =
-      //   (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
-      // const loadedImageReviews =
-      //   (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
-      // const loadedHistory =
-      //   (historyRes.data ?? []) as unknown as VarroaSubmissionHistory[];
       // GAMMEL: loaded.images var et flatt string[] direkte på raden.
       // NY: images er en egen relasjon ({image_path: string}[]) hentet inn
       // via getSubmissionSelect() - getSubmissionImagePaths() gjør den om
       // til det samme flate string[]-formatet som før.
-
       if (!loaded) {
         setLoadError("Fant ikke saken.");
         setItem(null);
