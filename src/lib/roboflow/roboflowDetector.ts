@@ -4,12 +4,12 @@ import type { DetectionResult } from "./types";
 import { callRoboflow } from "./roboflowClient";
 import { getPredictions, toBox } from "./roboflowResponse";
 
-// Midlertidige terskler. Vi finner de riktige på valid-settet senere.
-const THRESHOLD_STRICT = 0.7; // bare sikre midd -> countLow
-const THRESHOLD_MID = 0.5;    // beste estimat   -> count
-const THRESHOLD_LOOSE = 0.3;  // også usikre     -> countHigh
+// Midlertidige terskler.... Vi finner de riktige på valid-settet senere
+const THRESHOLD_STRICT = 0.7; // bare sikre midd --> countLow
+const THRESHOLD_MID = 0.5;    // beste estimat   --> count
+const THRESHOLD_LOOSE = 0.3;  // også usikre     --> countHigh
 
-// Ekte detektor: sender bildet til Roboflow og gjør svaret om til vårt format.
+// sender bildet til Roboflow og gjør svaret om til vårt format
 export class RoboflowDetector implements Detector {
   async analyze(image: Uint8Array): Promise<DetectionResult> {
     const apiKey = process.env.ROBOFLOW_API_KEY;
