@@ -24,24 +24,30 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
         async insert(params: SubmissionSubmitParams){
             return await submitVarroaScan(supabase, params);;
         },
+        
         async listAll(sortBy: SubmissionSortType, page: number, limit: number){
             // TODO: Params
             return await getSubmissions(supabase);
         },
+        
         async getById(id:string){
             return await getSubmissionById(supabase, id);
         },
+        
         async updateById(id:string, params: SubmissionUpdateParams){
             // updateSubmission
             return makeResultData(null);
         },
+        
         async getNext(userId:string, byStatus:SubmissionStatus){
             return await getNextsubmissionId(supabase,userId, byStatus);
         },
+        
         async getCount(countType : SubmissionCountType){
             // TODO: counttype
             return getAvailableNewSubmissionsCount(supabase);
         },
+
         async getReviewDataById(id:string){
             const [submissions, reviews, histories, reviewImages] = await Promise.all([
                 getSubmissionById(supabase, id),
@@ -49,6 +55,7 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
                 getSubmissionHistoryById(supabase, id),
                 getSubmissionReviewImagesById(supabase, id),
             ]);
+
             if(!submissions.success) return submissions;
             if(!reviews.success) return reviews;
             if(!histories.success) return histories;
@@ -59,13 +66,15 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
                     submissions.data !== null ? getSubmissionImagePaths(submissions.data): [],
                   );
 
+            if(!signedImages.success) return signedImages;
+
             return makeResultData(
                 {
                     submissions: submissions.data,
                     reviews: reviews.data,
                     histories: histories.data,
                     reviewImages: reviewImages.data,
-                    signedImages
+                    signedImages: signedImages.data,
                 }
             );
         },

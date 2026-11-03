@@ -445,19 +445,19 @@ export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:
 export async function createSignedImages(
   supabase: SupabaseClient,
   imagePaths: string[],
-) {
-  if (imagePaths.length === 0) return [] as SignedImage[];
+): Promise<Result<SignedImage[]>>{
+  if (imagePaths.length === 0) return makeResultData([] as SignedImage[]);
 
   const signedRes = await supabase.storage
     .from("varroa-submissions")
     .createSignedUrls(imagePaths, 60 * 30);
 
-  if (signedRes.error) throw signedRes.error;
+  if (signedRes.error) return supabaseStorageErrorToResultError(signedRes.error);
 
-  return (signedRes.data ?? []).flatMap((item) => {
+  return makeResultData((signedRes.data ?? []).flatMap((item) => {
     if (!item) return [];
     if (typeof item.path !== "string") return [];
     if (typeof item.signedUrl !== "string") return [];
     return [{ path: item.path, url: item.signedUrl }];
-  });
+  }));
 }
