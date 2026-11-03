@@ -199,7 +199,7 @@ export type SubmitVarroaScanInput = {
   source: string | null;
   deviceInfo: Record<string, unknown> | null;
   appVersion: string | null;
-  onProgress?: (step: string) => void;
+  // onProgress?: (step: string) => void;
 };
 
 export type SubmitVarroaScanResult = {
@@ -218,10 +218,10 @@ export async function submitVarroaScan(
   supabase: SupabaseClient,
   input: SubmitVarroaScanInput,
 ): Promise<SubmitVarroaScanResult> {
-  const { files, note, type, source, deviceInfo, appVersion, onProgress } = input;
+  const { files, note, type, source, deviceInfo, appVersion} = input;
   const submissionId = crypto.randomUUID();
 
-  onProgress?.("Oppretter innsending");
+  // onProgress?.("Oppretter innsending");
   const insertRes = await supabase.from("submissions").insert({
     id: submissionId,
     source,
@@ -235,11 +235,11 @@ export async function submitVarroaScan(
 
   const imagePaths: string[] = [];
   for (const [index, file] of files.entries()) {
-    onProgress?.(`Laster opp bilde ${index + 1}/${files.length}`);
+    // onProgress?.(`Laster opp bilde ${index + 1}/${files.length}`);
     const path = await uploadSubmissionImageFile(supabase, submissionId, file);
     imagePaths.push(path);
 
-    onProgress?.(`Registrerer bilde ${index + 1}/${files.length}`);
+    // onProgress?.(`Registrerer bilde ${index + 1}/${files.length}`);
     const imgRes = await supabase.from("images").insert({
       submission_id: submissionId,
       image_path: path,

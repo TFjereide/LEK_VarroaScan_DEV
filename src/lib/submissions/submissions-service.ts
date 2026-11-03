@@ -17,7 +17,7 @@ export interface SubmissionsService {
     getReviewDataById(id:string): Promise<VarroaSubmissionRecord>;
 }
 
-export function createSubmissionsService(repository: SubmissionsRepository){
+export function createSubmissionsService(repository: SubmissionsRepository):SubmissionsService{
     return {
         async submit(input: SubmissionSubmitParams){},
         async listAll(sortBy: SubmissionSortType, page: number, limit: number){},

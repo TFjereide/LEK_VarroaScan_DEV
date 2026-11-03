@@ -12,15 +12,7 @@ export type SubmissionCountType = "available-new" | "archived"
 export type SubmissionSortType = "created_at" | "updated_at" | "type" | "status" 
 
 export type SubmissionUpdateParams = Partial<VarroaSubmissionRecord>
-export type SubmissionSubmitParams = {
-    files: File[];
-    note: string | null;
-    type: SubmissionType;
-    source: string | null;
-    deviceInfo: Record<string, unknown> | null;
-    appVersion: string | null;
-}
-
+export type SubmissionSubmitParams = SubmitVarroaScanInput;
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
 export interface SubmissionsController {
@@ -34,7 +26,7 @@ export interface SubmissionsController {
     getReviewDataById(id:string): Promise<VarroaSubmissionRecord>;
 }
 
-export function createSubmissionsController(repository: SubmissionsService){
+export function createSubmissionsController(repository: SubmissionsService):SubmissionsController{
     return {
         async submit(input: SubmissionSubmitParams){},
         async listAll(sortBy: SubmissionSortType, page: number, limit: number){},
