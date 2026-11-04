@@ -45,7 +45,7 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
         
         async getCount(countType : SubmissionCountType){
             // TODO: counttype
-            return getAvailableNewSubmissionsCount(supabase);
+            return await getAvailableNewSubmissionsCount(supabase);
         },
 
         async getReviewDataById(id:string){

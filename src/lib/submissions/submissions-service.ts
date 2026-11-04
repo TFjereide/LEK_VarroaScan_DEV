@@ -1,35 +1,56 @@
-import { SupabaseClient } from "@supabase/supabase-js";
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
-import { SubmissionStatus, SubmissionType, SubmitVarroaScanInput, SubmitVarroaScanResult } from "../varroaScanDb";
+import { SubmissionStatus, SubmitVarroaScanResult } from "../varroaScanDb";
 import {SubmissionsRepository, submissionsRepository } from "./submissions-repository";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
+import { Result } from "../result/result";
+import { VarroaReviewData } from "./submissions-types";
 
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
 export interface SubmissionsService {
-    submit(input: SubmissionSubmitParams): Promise<SubmitVarroaScanResult>;
-    listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<VarroaSubmissionRecord[]>;
-    getById(id:string): Promise<VarroaSubmissionRecord>;
-    updateById(id:string, params: SubmissionUpdateParams): Promise<VarroaSubmissionRecord>;
+    submit(input: SubmissionSubmitParams): Promise<Result<SubmitVarroaScanResult>>;
+    listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<Result<VarroaSubmissionRecord[]>>;
+    getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
+    updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;
     
-    getNext(byStatus:SubmissionStatus): Promise<VarroaSubmissionRecord>;
-    getCount(countType : SubmissionCountType): Promise<number>;
-    getReviewDataById(id:string): Promise<VarroaSubmissionRecord>;
+    getNext(userId:string, byStatus:SubmissionStatus): Promise<Result<string>>;
+    getCount(countType : SubmissionCountType): Promise<Result<number>>;
+    getReviewDataById(id:string): Promise<Result<VarroaReviewData>>;
 }
 
 export function createSubmissionsService(repository: SubmissionsRepository):SubmissionsService{
     return {
-        async submit(input: SubmissionSubmitParams){},
-        async listAll(sortBy: SubmissionSortType, page: number, limit: number){},
-        async getById(id:string){},
-        async updateById(id:string, params: SubmissionUpdateParams){},
-        async getNext(byStatus:SubmissionStatus){},
-        async getCount(countType : SubmissionCountType){},
-        async getReviewDataById(id:string){},
+        async submit(input: SubmissionSubmitParams){
+            return await repository.insert(input);
+        },
+
+        async listAll(sortBy: SubmissionSortType, page: number, limit: number){
+            return await repository.listAll(sortBy,page,limit);
+        },
+
+        async getById(id:string){
+            return await repository.getById(id);
+        },
+        
+        async updateById(id:string, params: SubmissionUpdateParams){
+            return await repository.updateById(id, params);
+        },
+        
+        async getNext(userId:string, byStatus:SubmissionStatus){
+            return await repository.getNext(userId, byStatus);
+        },
+        
+        async getCount(countType : SubmissionCountType){
+            return await repository.getCount(countType);
+        },
+        
+        async getReviewDataById(id:string){
+            return await repository.getReviewDataById(id);
+        },
     }
 }
 
-const submissionsService = createSubmissionsService(submissionsRepository)
+export const submissionsService = createSubmissionsService(submissionsRepository)
 
 
 

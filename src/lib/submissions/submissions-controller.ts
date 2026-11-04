@@ -13,32 +13,33 @@ export type SubmissionSortType = "created_at" | "updated_at" | "type" | "status"
 
 export type SubmissionUpdateParams = Partial<VarroaSubmissionRecord>
 export type SubmissionSubmitParams = SubmitVarroaScanInput;
+
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
-export interface SubmissionsController {
-    submit(input: SubmissionSubmitParams): Promise<SubmitVarroaScanResult>;
-    listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<VarroaSubmissionRecord[]>;
-    getById(id:string): Promise<VarroaSubmissionRecord>;
-    updateById(id:string, params: SubmissionUpdateParams): Promise<VarroaSubmissionRecord>;
+// export interface SubmissionsController {
+//     submit(input: SubmissionSubmitParams): Promise<SubmitVarroaScanResult>;
+//     listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<VarroaSubmissionRecord[]>;
+//     getById(id:string): Promise<VarroaSubmissionRecord>;
+//     updateById(id:string, params: SubmissionUpdateParams): Promise<VarroaSubmissionRecord>;
     
-    getNext(byStatus:SubmissionStatus): Promise<VarroaSubmissionRecord>;
-    getCount(countType : SubmissionCountType): Promise<number>;
-    getReviewDataById(id:string): Promise<VarroaSubmissionRecord>;
-}
+//     getNext(byStatus:SubmissionStatus): Promise<VarroaSubmissionRecord>;
+//     getCount(countType : SubmissionCountType): Promise<number>;
+//     getReviewDataById(id:string): Promise<VarroaSubmissionRecord>;
+// }
 
-export function createSubmissionsController(repository: SubmissionsService):SubmissionsController{
-    return {
-        async submit(input: SubmissionSubmitParams){},
-        async listAll(sortBy: SubmissionSortType, page: number, limit: number){},
-        async getById(id:string){},
-        async updateById(id:string, params: SubmissionUpdateParams){},
-        async getNext(byStatus:SubmissionStatus){},
-        async getCount(countType : SubmissionCountType){},
-        async getReviewDataById(id:string){},
-    }
-}
+// export function createSubmissionsController(repository: SubmissionsService):SubmissionsController{
+//     return {
+//         async submit(input: SubmissionSubmitParams){},
+//         async listAll(sortBy: SubmissionSortType, page: number, limit: number){},
+//         async getById(id:string){},
+//         async updateById(id:string, params: SubmissionUpdateParams){},
+//         async getNext(byStatus:SubmissionStatus){},
+//         async getCount(countType : SubmissionCountType){},
+//         async getReviewDataById(id:string){},
+//     }
+// }
 
-const submissionsController = createSubmissionsController(submissionsService)
+// const submissionsController = createSubmissionsController(submissionsService)
 
 
 
