@@ -20,13 +20,13 @@ export async function ensureAnonymousSession(): Promise<AuthData> {
         // await supabase.auth.refreshSession();
         if (data.user) {
             if (error) return { user: null, error: toAppAuthError(error) };
-            return await getAppUserFromSupabaseUser();
+            return await getCurrentUser();
         }
     }
 
     const {error } = await supabase.auth.signInAnonymously()
     if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser();
+    return await getCurrentUser();
 }
 
 
@@ -34,9 +34,9 @@ export async function ensureAnonymousSession(): Promise<AuthData> {
  * Fetches the currently authenticated user from Supabase auth state.
  * Uses getUser() to validate the JWT token against the server.
  */
-export async function getCurrentUser(): Promise<AuthData> {
-    return await getAppUserFromSupabaseUser();
-}
+// export async function getCurrentUser(): Promise<AuthData> {
+//     return await getCurrentUser();
+// }
 
 
 /**
@@ -52,7 +52,7 @@ export async function getCurrentUser(): Promise<AuthData> {
 //     if (toAppAuthError(error) !== AppAuthError.Ok || !data.user) {
 //         return false
 //     }
-//     const {user, error:aError} = await getAppUserFromSupabaseUser();
+//     const {user, error:aError} = await getCurrentUser();
 
 //     if (!user || aError !== AppAuthError.Ok){
 //         return false
@@ -71,7 +71,7 @@ export async function getCurrentUser(): Promise<AuthData> {
 /** 
  * Gives you the app-specific information on a user from the supabase auth user type.
  * */
-export async function getAppUserFromSupabaseUser(): Promise<AuthData> {
+export async function getCurrentUser(): Promise<AuthData> {
     const supabase = await getClient();
     const { data: { user:authUser } } = await supabase.auth.getUser();
     
