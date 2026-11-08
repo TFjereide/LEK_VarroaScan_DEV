@@ -253,6 +253,13 @@ export default function Home() {
       note: "",
       noteOpen: false,
     }));
+    
+    { // Test for roboflow
+      const im = next[0];
+      getDetector()
+
+    }
+
     setImages((prev) => [...prev, ...next]);
 
     if (options?.reopenCamera && picked.length > 0) {
