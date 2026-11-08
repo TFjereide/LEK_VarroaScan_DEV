@@ -1,6 +1,6 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
-import { SubmissionStatus, SubmissionType, SubmitVarroaScanInput, SubmitVarroaScanResult } from "../varroaScanDb";
+import { SubmissionStatus, SubmissionType, SubmitVarroaScanInput, SubmitVarroaScanResult } from "../varroaSubmissionsDb";
 import { SubmissionsService } from "./submissions-service";
 
 

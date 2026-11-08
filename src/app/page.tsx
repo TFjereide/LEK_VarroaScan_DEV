@@ -6,10 +6,8 @@ import { usePathname } from "next/navigation";
 // lib
 import { getAppVersion } from "@/lib/appVersion";
 import { getDeviceInfo } from "@/lib/deviceInfo";
-// import { isVarroaAdmin } from "@/lib/auth/varroaAdmin";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-// NYTT: database-utility for ny database (samler queries for submissions/images)
-import { submitVarroaScan } from "@/lib/varroaScanDb";
+import { submit } from "@/lib/submissions/submissions-actions";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import * as utils from "@/lib/utils";
 import { SubmissionInfo, SubmissionType } from "@/lib/utils";
@@ -324,7 +322,7 @@ export default function Home() {
       // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
       const noteValue = note.trim() ? note.trim() : null;
 
-      const { submissionId, imagePaths } = await submitVarroaScan(supabase, {
+      const submitResult =  await submit({
         files: images.map((img) => img.file),
         note: noteValue,
         type: submissionType,
@@ -333,18 +331,27 @@ export default function Home() {
         appVersion,
       });
 
+      if(!submitResult.success){
+        setError(`Kunne ikke sende inn!`);
+        return;
+      }
+
+      const { submissionId, imagePaths } = submitResult.data;
+
       setLastSubmissionInfo({
         id: submissionId,
         type: submissionType,
         note: noteValue,
         imagesCount: imagePaths.length,
       });
+
       setDidSubmit(true);
       setImages((prev) => {
         for (const img of prev) URL.revokeObjectURL(img.previewUrl);
         return [];
       });
       setNote("");
+
     } catch (e) {
       const raw = e instanceof Error ? e.message : utils.normalizeErrorMessage(e);
       // const raw = e instanceof Error ? e.message : String(e);

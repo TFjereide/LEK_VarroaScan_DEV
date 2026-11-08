@@ -3,9 +3,10 @@ import 'server-only'; // Will give errors if this is used in a client component
 import { createServerClient} from '@supabase/ssr';
 import { type SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { Database } from '../supabase/database.types';
 
 
-export async function getClient(): Promise<SupabaseClient>{
+export async function getClient(): Promise<SupabaseClient<Database>>{
     const cookieStore = await cookies()
 
     return createServerClient(
