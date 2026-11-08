@@ -18,7 +18,7 @@ import {
   type VarroaSubmissionRecord,
 } from "@/lib/varroaWorkflow";
 import { useAuth } from "@/app/auth-provider";
-import { fetchSubmissions } from "@/lib/varroaScanDb";
+import { getSubmissions } from "@/lib/varroaScanDb";
 import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 
@@ -67,7 +67,7 @@ export default function AdminArchivePage() {
         return;
       }
 
-      const fetchedSubmissions = await fetchSubmissions(supabase);
+      const fetchedSubmissions = await getSubmissions(supabase);
 
 
       setItems(fetchedSubmissions);

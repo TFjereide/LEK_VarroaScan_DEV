@@ -47,7 +47,9 @@ import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 import { Database } from "@/lib/supabase/database.types";
-import { fetchSubmissionById, getSubmissionById, getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "@/lib/varroaScanDb";
+import { getSubmissionById, getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "@/lib/varroaScanDb";
+import { getReviewDataById } from "@/lib/submissions/submissions-actions";
+import { VarroaReviewData } from "@/lib/submissions/submissions-types";
 
 type SaveAction =
   | "SAVE_DRAFT"
@@ -116,6 +118,9 @@ export function ProductionSubmissionClient() {
 
   // const [isAuthed, setIsAuthed] = useState(false);
   // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
+  
+  // Should be replaced with an VarroaReviewData item, like this:
+  // const [reviewData, setReviewData] = useState<VarroaReviewData|null>(null);
   const [item, setItem] = useState<VarroaSubmissionRecord | null>(null);
   const [images, setImages] = useState<SignedImage[]>([]);
   const [selectedImage, setSelectedImage] = useState(0);
@@ -149,158 +154,52 @@ export function ProductionSubmissionClient() {
 
     setIsLoading(true);
     try {
-      // const { data: sessionData } = await supabase.auth.getSession();
-      // const session = sessionData.session;
-      // setIsAuthed(Boolean(session));
-      // if (!session) {
-      // setAccess(null);
-      // setItem(null);
-      // setImages([]);
-      // window.location.replace(adminLoginHref);
-      // return;
-      // }
 
-      // const nextAccess = await getAuthorizedUserActions(supabase, session);
-      // setAccess(nextAccess);
-      // if (!nextAccess.role) {
-      //   setItem(null);
-      //   setImages([]);
-      //   setLoadError("Du mangler rolle i VarroaScan-produksjonen.");
-      //   return;
-      // }
+      const reviewData = await getReviewDataById(id);
+      if (!reviewData.success){
+        setLoadError(reviewData.error.message);
+        return;
+      }
 
-      // GAMMEL: leste fra varroa_submissions og varroa_submission_history
-      // (gamle databasen, finnes ikke lenger). NY: submissions/
-      // submission_history er de nye tabellnavnene. Historikk-spørringen
-      // bruker nå getHistorySelect(), som henter de faktiske kolonnene
-      // (changed_by/changed_at) men gir dem tilbake under de gamle
-      // feltnavnene (user_id/created_at) slik resten av filen forventer.
-      const [loaded, loadedReviews, loadedHistory, loadedImageReviews] = await Promise.all([
-        getSubmissionById(supabase, id),
-        getSubmissionReviewsById(supabase,id),
-        getSubmissionHistoryById(supabase, id),
-        getSubmissionReviewImagesById(supabase, id),
-      ]);
-
-      // const [submissionRes, reviewsRes, historyRes, imageReviewsRes] = await Promise.all([
-      //   supabase
-      //     .from("submissions")
-      //     .select(getSubmissionSelect())
-      //     .eq("id", id)
-      //     .maybeSingle(),
-      //   supabase
-      //     .from("varroa_submission_reviews")
-      //     .select(
-      //       "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
-      //     )
-      //     .eq("submission_id", id)
-      //     .order("updated_at", { ascending: false })
-      //     .limit(20),
-      //   supabase
-      //     .from("submission_history")
-      //     .select(getHistorySelect())
-      //     .eq("submission_id", id)
-      //     .order("changed_at", { ascending: false })
-      //     .limit(40),
-      //   supabase
-      //     .from("varroa_submission_review_images")
-      //     .select(
-      //       "id,submission_id,review_id,created_at,updated_at,created_by,image_index,mite_count,image_quality,comment,training_ready,approved",
-      //     )
-      //     .eq("submission_id", id)
-      //     // NOTE: FUngerte etter at jeg tok dette vekk. Det virker ikke som om det
-      //     // burde være her heller?
-      //     // .eq("created_by", authedActions.userId)
-      //     .order("image_index", { ascending: true }),
-      // ]);
-
-      // if (submissionRes.error) {
-      //   if (isMissingWorkflowSchemaError(submissionRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw submissionRes.error;
-      // }
-      // if (!submissionRes.data) {
-      //   setLoadError("Fant ikke saken.");
-      //   setItem(null);
-      //   setImages([]);
-      //   return;
-      // }
-      // if (reviewsRes.error) {
-      //   if (isMissingWorkflowSchemaError(reviewsRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw reviewsRes.error;
-      // }
-      // if (historyRes.error) {
-      //   if (isMissingWorkflowSchemaError(historyRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw historyRes.error;
-      // }
-      // if (imageReviewsRes.error) {
-      //   if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-      //     setLoadError(getWorkflowMigrationMessage());
-      //     return;
-      //   }
-      //   throw imageReviewsRes.error;
-      // }
-
-
-      // const loaded = submissionRes.data as unknown as VarroaSubmissionRecord;
-      // const loadedReviews =
-      //   (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
-      // const loadedImageReviews =
-      //   (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
-      // const loadedHistory =
-      //   (historyRes.data ?? []) as unknown as VarroaSubmissionHistory[];
-      // GAMMEL: loaded.images var et flatt string[] direkte på raden.
-      // NY: images er en egen relasjon ({image_path: string}[]) hentet inn
-      // via getSubmissionSelect() - getSubmissionImagePaths() gjør den om
-      // til det samme flate string[]-formatet som før.
-
-      if (!loaded) {
+      if (!reviewData.data.submission) {
         setLoadError("Fant ikke saken.");
         setItem(null);
         setImages([]);
         return;
       }
 
-      const signedImages = await createSignedImages(
-        supabase,
-        getSubmissionImagePaths(loaded),
-      );
+      setItem(reviewData.data.submission);
+      setReviews(reviewData.data.reviews);
+      setHistory(reviewData.data.histories);
+      setImages(reviewData.data.signedImages);
 
-      setItem(loaded);
-      setReviews(loadedReviews);
-      setHistory(loadedHistory);
-      setImages(signedImages);
-
-      const ownReview = loadedReviews.find((review) => review.created_by === authedActions.userId);
-      const latestReview = ownReview ?? loadedReviews[0] ?? null;
+      const ownReview = reviews.find((review) => review.created_by === authedActions.userId);
+      const latestReview = ownReview ?? reviews[0] ?? null;
       const sharedImageNotes = latestReview?.image_notes;
       const nextImageIndex =
         typeof latestReview?.current_image_index === "number"
           ? latestReview.current_image_index
           : 0;
+
       setSelectedImage(
-        signedImages.length === 0 ? 0 : Math.min(Math.max(nextImageIndex, 0), signedImages.length - 1),
+        reviewData.data.signedImages.length === 0 
+          ? 0 
+          : Math.min(Math.max(nextImageIndex, 0), reviewData.data.signedImages.length - 1),
       );
+      
       const nextDrafts: Record<number, ImageReviewDraft> = {};
-      for (let index = 0; index < signedImages.length; index += 1) {
+      for (let index = 0; index < reviewData.data.signedImages.length; index += 1) {
         nextDrafts[index] = createEmptyImageDraft(index);
       }
-      for (const imageReview of loadedImageReviews) {
+
+      for (const imageReview of reviewData.data.reviewImages) {
         nextDrafts[imageReview.image_index] = createDraftFromImageReview(
           imageReview,
           sharedImageNotes,
         );
       }
-      if (loadedImageReviews.length === 0 && latestReview) {
-        const fallbackIndex = Math.min(Math.max(nextImageIndex, 0), Math.max(signedImages.length - 1, 0));
+      if (reviewData.data.reviewImages.length === 0 && latestReview) {
+        const fallbackIndex = Math.min(Math.max(nextImageIndex, 0), Math.max(reviewData.data.signedImages.length - 1, 0));
         const annotations = extractAnnotationsFromImageNotes(sharedImageNotes, fallbackIndex);
         // GAMMEL: falt tilbake på loaded.manual_mite_count / loaded.quality_rating /
         // loaded.review_comment når det ikke fantes en per-bilde-vurdering ennå.
@@ -318,7 +217,7 @@ export function ProductionSubmissionClient() {
                 : "",
           imageQuality: latestReview.image_quality ?? "",
           comment: latestReview.comment ?? "",
-          trainingReady: Boolean(latestReview.training_ready ?? loaded.training_ready),
+          trainingReady: Boolean(latestReview.training_ready ?? reviewData.data.submission.training_ready),
           approved: Boolean(latestReview.approved),
           annotations,
         };

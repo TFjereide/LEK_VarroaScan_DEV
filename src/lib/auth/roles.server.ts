@@ -1,5 +1,5 @@
 "use server"
-import { getUserRole } from "../varroaScanDb";
+import { getUserRole } from "../varroaUserDb";
 import { getRoleAuthorizedActions} from "./roles.client";
 import { AppRole, AuthorizedUserActions } from "./roles.types";
 import { getClient } from "./supabase.server";

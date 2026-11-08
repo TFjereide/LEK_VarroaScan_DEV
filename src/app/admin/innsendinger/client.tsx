@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider";
 import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 import { PostgrestResponse } from "@supabase/supabase-js";
-import { fetchSubmissions, getAvailableNewSubmissionsCount, getNextsubmissionForControlId, getNextsubmissionId } from "@/lib/varroaScanDb";
+import { getSubmissions, getAvailableNewSubmissionsCount, getNextsubmissionForControlId, getNextsubmissionId } from "@/lib/varroaScanDb";
 
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
@@ -58,8 +58,6 @@ export function AdminQueueClient() {
     return `${basePath}/admin/?${params.toString()}`;
   }, [basePath]);
 
-  // const [isAuthed, setIsAuthed] = useState(false);
-  // const [access, setAccess] = useState<AuthorizedUserActions | null>(null);
   const [itemsUnfiltered, setItemsUnfiltered] = useState<VarroaSubmissionRecord[]>([]);
   const [availableNewCount, setAvailableNewCount] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,7 +65,7 @@ export function AdminQueueClient() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleDelete = useCallback(async (id: string, title: string) => {
-    console.log("handledelete: ", itemsUnfiltered.length)
+    // console.log("handledelete: ", itemsUnfiltered.length)
 
     const typeOk = confirm(
       `Er du HELT sikker på at du vil slette denne saken?\n\n${title}\n\nSletting er permanent. Alle revurderinger, bilder, notater og historikk blir slettet fra databasen. Bilder i Storage må slettes manuelt om nødvendig.\n\nSkriv inn nøyaktig ordet Slett for å fortsette:`,
@@ -113,9 +111,9 @@ export function AdminQueueClient() {
   const view = (searchParams.get("view") as QueueView | null) ?? "all";
 
   const fetchItems = async () => {
-    console.log("Fetching items");
+    // console.log("Fetching items");
     const [submissionsRes, availableCountRes] = await Promise.all([
-      fetchSubmissions(supabase),
+      getSubmissions(supabase),
       getAvailableNewSubmissionsCount(supabase)
     ]);
     setAvailableNewCount(availableCountRes);
@@ -160,7 +158,6 @@ export function AdminQueueClient() {
   // TODO:
   const reload = useCallback(async () => {
     
-    console.log("reload")
     setLoadError(null);
 
     if (!supabase) {
@@ -172,7 +169,6 @@ export function AdminQueueClient() {
     try {
       fetchItems();
     } catch (e) {
-      console.log("hnngh")
 
       const message =
         typeof e === "object" && e && "message" in e
@@ -185,9 +181,7 @@ export function AdminQueueClient() {
     }
   }, [adminLoginHref, supabase]);
 
-  console.log("before useffect")
   useEffect(() => {
-    console.log("useffect")
     void fetchItems()
   }, [])
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppRole } from "./auth/roles.types";
+import { ImageRecord } from "./varroaScanDb";
 
 export const VARROA_STATUSES = [
   "NY",
@@ -47,10 +48,7 @@ export type VarroaSubmissionRecord = {
   assigned_to: string | null;
   processed_by: string | null;
   training_ready: boolean;
-  // Rå form rett fra Supabase (images er en relasjon nå, ikke et
-  // tekst-array). Bruk getSubmissionImagePaths(item) for å få et vanlig
-  // string[] med bildestier, slik resten av koden er vant til.
-  images: { image_path: string }[] | null;
+  images: ImageRecord[] | null;
 };
 
 // NY: matcher submission_history-tabellen. changed_by/changed_at er de

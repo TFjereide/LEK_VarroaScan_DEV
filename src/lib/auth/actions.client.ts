@@ -2,9 +2,9 @@ import { type User as SupabaseUser } from '@supabase/auth-js';
 import { getClient } from "@/lib/auth/supabase.client";
 import { type User } from "@/lib/auth/user";
 import { AppAuthError, toAppAuthError } from "@/lib/auth/appAuthError";
-import { getUserRoleExtended } from '../varroaScanDb';
+import { getUserRoleExtended } from '../varroaUserDb';
 import { AuthData } from './authData';
-import { getAppUserFromSupabaseUser } from './actions.server';
+import { getCurrentUser } from './actions.server';
 
 /**
  * Authenticates an existing user using email and password credentials.
@@ -17,7 +17,7 @@ export async function loginWithPassword(email: string, password: string): Promis
         password,
     });
     if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser();
+    return await getCurrentUser();
 }
 
 /**
@@ -36,7 +36,7 @@ export async function registerUser(email: string, password: string): Promise<Aut
 
 
     if (error) return { user: null, error: toAppAuthError(error) };
-    return await getAppUserFromSupabaseUser();
+    return await getCurrentUser();
 }
 
 /**
