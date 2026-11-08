@@ -331,9 +331,6 @@ export default function Home() {
         source: sourceParam ?? "web",
         deviceInfo: getDeviceInfo(),
         appVersion,
-        onProgress: (s) => {
-          step = s;
-        },
       });
 
       setLastSubmissionInfo({

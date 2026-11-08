@@ -19,10 +19,10 @@ export async function proxy(request: NextRequest) {
   // dobbeltsjekker admin-path. Litt rart, men ok.
   if (request.nextUrl.pathname.startsWith('/admin')) {
     if (!isAdmin(user.role)) {
-      console.log("Not admin -> redirect to /login");
+      // console.log("Not admin -> redirect to /login");
       return NextResponse.redirect(new URL('/login?redirectedfrom=admin', request.url));
     }
-    console.log("Proxy: admin access granted");
+    // console.log("Proxy: admin access granted");
   }
 
   return supabaseResponse;

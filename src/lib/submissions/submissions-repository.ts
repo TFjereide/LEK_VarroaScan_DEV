@@ -49,28 +49,43 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
         },
 
         async getReviewDataById(id:string){
-            const [submissions, reviews, histories, reviewImages] = await Promise.all([
+
+            // GAMMEL: leste fra varroa_submissions og varroa_submission_history
+            // (gamle databasen, finnes ikke lenger). NY: submissions/
+            // submission_history er de nye tabellnavnene. Historikk-spørringen
+            // bruker nå getHistorySelect(), som henter de faktiske kolonnene
+            // (changed_by/changed_at) men gir dem tilbake under de gamle
+            // feltnavnene (user_id/created_at) slik resten av filen forventer.
+            const [submission, reviews, histories, reviewImages] = await Promise.all([
                 getSubmissionById(supabase, id),
                 getSubmissionReviewsById(supabase,id),
                 getSubmissionHistoryById(supabase, id),
                 getSubmissionReviewImagesById(supabase, id),
             ]);
 
-            if(!submissions.success) return submissions;
+            if(!submission.success) return submission;
+            if (submission.data === null){
+                return makeResultError(ErrorCode.NOT_FOUND, "submission not found");
+            }
             if(!reviews.success) return reviews;
             if(!histories.success) return histories;
             if(!reviewImages.success) return reviewImages;
 
+            // GAMMEL: submission.images var et flatt string[] direkte på raden.
+            // NY: images er en egen relasjon ({image_path: string}[]) hentet inn
+            // via getSubmissionSelect() - getSubmissionImagePaths() gjør den om
+            // til det samme flate string[]-formatet som før.
+            
             const signedImages = await createSignedImages(
                     supabase,
-                    submissions.data !== null ? getSubmissionImagePaths(submissions.data): [],
+                    submission.data !== null ? getSubmissionImagePaths(submission.data): [],
                   );
 
             if(!signedImages.success) return signedImages;
 
             return makeResultData(
                 {
-                    submissions: submissions.data,
+                    submission: submission.data,
                     reviews: reviews.data,
                     histories: histories.data,
                     reviewImages: reviewImages.data,
@@ -80,5 +95,3 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
         },
     }
 }
-
-export const submissionsRepository = createSubmissionsRepository(await getClient());

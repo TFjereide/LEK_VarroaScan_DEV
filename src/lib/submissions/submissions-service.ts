@@ -1,9 +1,10 @@
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
 import { SubmissionStatus, SubmitVarroaScanResult } from "../varroaScanDb";
-import {SubmissionsRepository, submissionsRepository } from "./submissions-repository";
+import {createSubmissionsRepository, SubmissionsRepository } from "./submissions-repository";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { Result } from "../result/result";
 import { VarroaReviewData } from "./submissions-types";
+import { getClient } from "../auth/supabase.server";
 
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
@@ -50,8 +51,10 @@ export function createSubmissionsService(repository: SubmissionsRepository):Subm
     }
 }
 
-export const submissionsService = createSubmissionsService(submissionsRepository)
-
+export async function getSubmissionsService(){
+    const repo = await createSubmissionsRepository(await getClient());
+    return createSubmissionsService(repo);
+}
 
 
 

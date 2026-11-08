@@ -85,9 +85,12 @@ export function makeResultData<T>(data:T):ResultData<T>{
 }
 
 export function makeResultError(
-    code: ErrorCode,
-    message: string,
-    details?: string):ResultError{
+        code: ErrorCode,
+        message: string,
+        details?: string
+    ):ResultError{
+        
+    
     return {
         success: false,
         error: {

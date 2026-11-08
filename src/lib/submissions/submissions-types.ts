@@ -1,7 +1,7 @@
 import { SignedImage, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "../varroaWorkflow";
 
 export type VarroaReviewData = {
-    submissions: VarroaSubmissionRecord | null;
+    submission: VarroaSubmissionRecord;
     reviews: VarroaSubmissionReview[];
     histories: VarroaSubmissionHistory[];
     reviewImages: VarroaSubmissionImageReview[];
