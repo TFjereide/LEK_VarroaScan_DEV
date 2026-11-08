@@ -1,5 +1,6 @@
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
-import { SubmissionStatus, SubmitVarroaScanResult } from "../varroaScanDb";
+import { SubmitVarroaScanResult } from "../varroaSubmissionsDb";
+import {  SubmissionStatus } from "../varroaSubmissionsDb";
 import {createSubmissionsRepository, SubmissionsRepository } from "./submissions-repository";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { Result } from "../result/result";
@@ -10,7 +11,7 @@ import { getClient } from "../auth/supabase.server";
 // user session overlap. Can be good indicator of attack of some sort.
 export interface SubmissionsService {
     submit(input: SubmissionSubmitParams): Promise<Result<SubmitVarroaScanResult>>;
-    listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<Result<VarroaSubmissionRecord[]>>;
+    listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus): Promise<Result<VarroaSubmissionRecord[]>>;
     getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
     updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;
     
@@ -25,8 +26,8 @@ export function createSubmissionsService(repository: SubmissionsRepository):Subm
             return await repository.insert(input);
         },
 
-        async listAll(sortBy: SubmissionSortType, page: number, limit: number){
-            return await repository.listAll(sortBy,page,limit);
+        async listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus){
+            return await repository.listAll(page,limit, sortBy, byStatus);
         },
 
         async getById(id:string){

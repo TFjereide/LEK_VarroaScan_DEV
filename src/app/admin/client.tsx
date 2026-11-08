@@ -28,8 +28,8 @@ import * as actions from "@/lib/auth/actions.client";
 import { useRouter } from 'next/navigation';
 import { useAuth } from "../auth-provider";
 import { ManageUserSection } from "@/components/manageUsers/manageUsers";
-// import { fetchSubmissions } from "@/lib/varroaScanDb";
-import { getClient } from "@/lib/auth/supabase.client";
+import { claimNextSubmission, getById, getCount, getNext, listAll } from "@/lib/submissions/submissions-actions";
+// import { getClient } from "@/lib/auth/supabase.client";
 // import { CommonHeader } from "@/components/header";
 
 
@@ -172,17 +172,22 @@ export function AdminPageClient() {
       // const [submissionsRes, availableRes] = await fetchSubmissions(getClient());
       
       // TODO: use database functions!
-      const supabase = await getClient();
+      // const supabase = await getClient();
+      // const [submissionsRes, availableRes] = await Promise.all([
+      //   supabase
+      //     .from("submissions")
+      //     .select(getSubmissionSelect())
+      //     .order("updated_at", { ascending: false })
+      //     .limit(300),
+      //   supabase.rpc("varroa_available_new_count"),
+      // ]);
+
       const [submissionsRes, availableRes] = await Promise.all([
-        supabase
-          .from("submissions")
-          .select(getSubmissionSelect())
-          .order("updated_at", { ascending: false })
-          .limit(300),
-        supabase.rpc("varroa_available_new_count"),
+        listAll(0,0, "updated_at"),
+        getCount("available-new")
       ]);
 
-      if (submissionsRes.error) {
+      if (!submissionsRes.success) {
         if (isMissingWorkflowSchemaError(submissionsRes.error)) {
           setLoadError(getWorkflowMigrationMessage());
           setItems([]);
@@ -193,7 +198,7 @@ export function AdminPageClient() {
         setItems((submissionsRes.data ?? []) as unknown as VarroaSubmissionRecord[]);
       }
 
-      if (availableRes.error) {
+      if (!availableRes.success) {
         if (isMissingWorkflowSchemaError(availableRes.error)) {
           setLoadError(getWorkflowMigrationMessage());
           setAvailableNewCount(0);
@@ -538,26 +543,33 @@ export function AdminPageClient() {
   // };
 
   const openNextSubmission = async () => {
-    const supabase = await getClient();
+    // const supabase = await getClient();
     setActionMsg(null);
     setLoadError(null);
     setIsLoading(true);
 
     try {
+      // FIXME: The logic here never really worked. I don't get why it's set up this way.
+      // Probably a good thing to require the userId no matter what.
       const userId = user?.user_id;
       if (userId) {
         // GAMMEL: varroa_submissions. NY: submissions. "updated_at" er en
         // ekte kolonne (ikke et alias), så sorteringen trenger ingen endring.
-        const underWorkRes = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("status", "UNDER_ARBEID")
-          .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
-          .order("updated_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // const underWorkRes = await supabase
+        //   .from("submissions")
+        //   .select("id")
+        //   .eq("status", "UNDER_ARBEID")
+        //   .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
+        //   .order("updated_at", { ascending: true })
+        //   .limit(1)
+        //   .maybeSingle();
 
-        if (underWorkRes.error) throw underWorkRes.error;
+        
+        const underWorkIdRes = await getNext(userId, "UNDER_ARBEID");
+        if(!underWorkIdRes.success) throw underWorkIdRes.error;
+
+        const underWorkRes = await getById(underWorkIdRes.data);
+        if (!underWorkRes.success) throw underWorkRes.error;
         const resumeId = String(underWorkRes.data?.id ?? "");
         if (resumeId) {
           window.location.assign(
@@ -575,17 +587,12 @@ export function AdminPageClient() {
         // submission_date i submissions-tabellen (created_at var kun et
         // alias inni getSubmissionSelect(), og gjelder ikke her siden vi
         // bare henter "id"). NY: sorter på det ekte kolonnenavnet.
-        const reviewRes = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("status", "KLAR_FOR_KONTROLL")
-          .neq("processed_by", userId ?? "")
-          .order("submission_date", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        const reviewIdRes = await getNext(userId ?? "", "KLAR_FOR_KONTROLL")
 
-        if (reviewRes.error) throw reviewRes.error;
-        const reviewId = String(reviewRes.data?.id ?? "");
+
+        if (!reviewIdRes.success) throw reviewIdRes.error;
+
+        const reviewId = reviewIdRes.data;
         if (reviewId) {
           window.location.assign(
             appendAdminContext(
@@ -596,22 +603,19 @@ export function AdminPageClient() {
           return;
         }
       }
-
-      const res = await supabase.rpc("varroa_claim_next_submission");
-      if (res.error) {
-        if (isMissingWorkflowSchemaError(res.error)) {
-          setLoadError(getWorkflowMigrationMessage());
-          return;
-        }
-        throw res.error;
+      const nextClaimedSubmissionRes = await claimNextSubmission();
+      if (!nextClaimedSubmissionRes.success){
+        setLoadError(nextClaimedSubmissionRes.error.message)
+        return
       }
-
-      const nextId = String(res.data ?? "");
-      if (!nextId) {
+      
+      if (!nextClaimedSubmissionRes.data) {
         setActionMsg("Ingen flere ledige saker akkurat nå.");
         await reload();
         return;
       }
+      
+      const nextId = String(nextClaimedSubmissionRes.data ?? "");
 
       window.location.assign(
         appendAdminContext(

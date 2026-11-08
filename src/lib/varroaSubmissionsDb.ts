@@ -1,6 +1,8 @@
-import type { PostgrestResponse, SupabaseClient } from "@supabase/supabase-js";
+import type { PostgrestResponse, PostgrestSingleResponse, SupabaseClient } from "@supabase/supabase-js";
 import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "./varroaWorkflow";
-import { ErrorCode, Result, makeResultError, makeResultData,supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError} from "./result/result";
+import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "./result/result";
+import { SubmissionSortType } from "./submissions/submissions-controller";
+import { Database } from "./supabase/database.types";
 
 
 // (TGF)TODO: 
@@ -35,7 +37,7 @@ export const SUBMISSIONS_BUCKET = "varroa-submissions";
 
 export type ImageQuality = "Høy" | "Middels" | "Lav" | "ikke_vurdert";
 export type ImageStatus = "pending" | "analyzed" | "failed";
-export type SubmissionStatus = "NY" | "UNDER_ARBEID" | "ARKIVERT";
+export type SubmissionStatus = "NY" | "UNDER_ARBEID" | "ARKIVERT" | "KLAR_FOR_KONTROLL";
 export type SubmissionType = "BUNNBRETT_FOTO" | "KONTROLLFOTO";
 
 //beskriver formen på dataene i databasen
@@ -59,56 +61,71 @@ export type ImageRecord = Omit<SubmissionImageRow, "meta_data">
 //   "id, submission_date, source, device_info, app_version, comment, status, type, " +
 //   "images(image_id, submission_id, image_path, quality, notes, image_status, meta_data, mite_count, created_at)";
 const SUBMISSION_SELECT = [
-    "*",
-    "images(*)",
-  ].join(",");
+  "*",
+  "images(*)",
+].join(",");
 
 /** Admin-oversikt: alle innsendinger, nyeste først. */
 export async function getSubmissions(
-  supabase: SupabaseClient,
-  limit = 200,
+  supabase: SupabaseClient<Database>,
+  page: number,
+  limit: number,
+  sortBy?: SubmissionSortType,
+  byStatus?: SubmissionStatus,
 ): Promise<Result<VarroaSubmissionRecord[]>> {
 
-   try {
-      const submissionsResRaw = await supabase
-          .from("submissions")
-          .select(SUBMISSION_SELECT)
-          .order("updated_at", { ascending: false })
-          .limit(500)
+  const _sortBy = sortBy ?? "updated_at"
 
-      if (submissionsResRaw.error) {
-          console.error("Failed to fetch submissions:", submissionsResRaw.error);
-          return supabaseErrorToResultError(submissionsResRaw.error);
-      } else {
-        
-        const fetchedItems = (submissionsResRaw.data ?? []) as unknown as VarroaSubmissionRecord[];
-        return makeResultData(fetchedItems);
-      }
+  try {
+    let submissionsResRaw: PostgrestSingleResponse<unknown>
 
-    } catch (error) {
-      return makeResultError( 
-            ErrorCode.DATABASE_CONNECTION_ERROR,
-            "Failed to communicate with the database.",
-            error instanceof Error ? error.message : String(error),
-        );
+    if (!byStatus) {
+      submissionsResRaw = await supabase
+        .from("submissions")
+        .select(SUBMISSION_SELECT)
+        .order(_sortBy, { ascending: false })
+        .limit(500)
+    } else {
+      submissionsResRaw = await supabase
+        .from("submissions")
+        .select(SUBMISSION_SELECT)
+        .eq("status", byStatus)
+        .order(_sortBy, { ascending: false })
+        .limit(500)
     }
+    if (submissionsResRaw.error) {
+      console.error("Failed to fetch submissions:", submissionsResRaw.error);
+      return supabaseErrorToResultError(submissionsResRaw.error);
+    } else {
+
+      const fetchedItems = (submissionsResRaw.data ?? []) as unknown as VarroaSubmissionRecord[];
+      return makeResultData(fetchedItems);
+    }
+
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
 }
 
-export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient): Promise<Result<number>>{
-  try{
+export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient): Promise<Result<number>> {
+  try {
     const availableResRaw = await supabase.rpc("varroa_available_new_count");
     const availableRes = availableResRaw as PostgrestResponse<number>;
-    if(availableRes.error){
+    if (availableRes.error) {
       return supabaseErrorToResultError(availableRes.error);
     }
     const availableCount = availableRes.data[0] ?? 0;
     return makeResultData(availableCount);
 
-  }catch (error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -118,18 +135,18 @@ export async function getSubmissionById(
   supabase: SupabaseClient,
   id: string,
 ): Promise<Result<VarroaSubmissionRecord | null>> {
-  try{
+  try {
     const res = await supabase
       .from("submissions")
       .select(SUBMISSION_SELECT)
       .eq("id", id)
       .maybeSingle();
-  
-    if (res.error)  return supabaseErrorToResultError(res.error);
-    if (!res.data)  return makeResultData(null);
-  
+
+    if (res.error) return supabaseErrorToResultError(res.error);
+    if (!res.data) return makeResultData(null);
+
     const submission = res.data as unknown as VarroaSubmissionRecord;
-    if (!submission.images){
+    if (!submission.images) {
       return makeResultData(submission);
     }
     // Nøstede rader har ikke garantert rekkefølge uten explicit order på
@@ -138,11 +155,11 @@ export async function getSubmissionById(
       a.created_at.localeCompare(b.created_at),
     );
     return makeResultData({ ...submission, images: sortedImages });
-  }catch (error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -162,8 +179,8 @@ export async function getSignedImageUrls(
   paths: string[],
   expirySeconds = 60 * 30,
 ): Promise<Result<Map<string, string>>> {
-  
-  try{
+
+  try {
     const map = new Map<string, string>();
     if (paths.length === 0) return makeResultData(map);
 
@@ -181,11 +198,11 @@ export async function getSignedImageUrls(
     }
     return makeResultData(map);
 
-  }catch(error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -200,7 +217,7 @@ async function uploadSubmissionImageFile(
   submissionId: string,
   file: File,
 ): Promise<Result<string>> {
-  try{
+  try {
     const objectPath = `submissions/${submissionId}/${crypto.randomUUID()}.${extensionFromFile(file)}`;
     const res = await supabase.storage.from(SUBMISSIONS_BUCKET).upload(objectPath, file, {
       cacheControl: "3600",
@@ -210,11 +227,11 @@ async function uploadSubmissionImageFile(
 
     if (res.error) return supabaseStorageErrorToResultError(res.error);
     return makeResultData(objectPath);
-  }catch (error){
-     return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -245,8 +262,8 @@ export async function submitVarroaScan(
   supabase: SupabaseClient,
   input: SubmitVarroaScanInput,
 ): Promise<Result<SubmitVarroaScanResult>> {
-  try{  
-    const { files, note, type, source, deviceInfo, appVersion} = input;
+  try {
+    const { files, note, type, source, deviceInfo, appVersion } = input;
     const submissionId = crypto.randomUUID();
 
     // onProgress?.("Oppretter innsending");
@@ -265,7 +282,7 @@ export async function submitVarroaScan(
     for (const [index, file] of files.entries()) {
       // onProgress?.(`Laster opp bilde ${index + 1}/${files.length}`);
       const uploadRes = await uploadSubmissionImageFile(supabase, submissionId, file);
-      if (!uploadRes.success){
+      if (!uploadRes.success) {
         return uploadRes;
       }
       const path = uploadRes.data;
@@ -281,39 +298,46 @@ export async function submitVarroaScan(
       if (imgRes.error) return supabaseErrorToResultError(imgRes.error);
     }
     return makeResultData({ submissionId, imagePaths });
-  }catch(error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
 
-export async function getNextsubmissionId(supabase :SupabaseClient, userId:string, byStatus:SubmissionStatus):Promise<Result<string>>{
+export async function getNextsubmissionId(supabase: SupabaseClient, userId: string, byStatus: SubmissionStatus): Promise<Result<string>> {
 
-    // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
-    // er en ekte kolonne, så sorteringen trengte ingen endring.
 
-    try{
-      const underWorkRes = await supabase
-        .from("submissions")
-        .select("id")
-        .eq("status", byStatus)
-        .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
-        .order("updated_at", { ascending: true })
-        .limit(1)
-        .maybeSingle();
-    
-      if (underWorkRes.error) return supabaseErrorToResultError(underWorkRes.error);
-      const resumeId = String(underWorkRes.data?.id ?? "");
+  // Kommentar til implementasjonen av dette på databasesiden
+  // GAMMEL: sorterte på "created_at" - den kolonnen heter nå
+  // submission_date i submissions-tabellen (created_at var kun et
+  // alias inni getSubmissionSelect(), og gjelder ikke her siden vi
+  // bare henter "id"). NY: sorter på det ekte kolonnenavnet.
 
-      return makeResultData(resumeId);
-  } catch(error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
+  // er en ekte kolonne, så sorteringen trengte ingen endring.
+
+  try {
+    const underWorkRes = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("status", byStatus)
+      .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
+      .order("updated_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (underWorkRes.error) return supabaseErrorToResultError(underWorkRes.error);
+    const resumeId = String(underWorkRes.data?.id ?? "");
+
+    return makeResultData(resumeId);
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -339,7 +363,7 @@ export async function getNextsubmissionId(supabase :SupabaseClient, userId:strin
 // }
 
 
-export async function getSubmissionHistoryById(supabase:SupabaseClient, id:string):Promise<Result<VarroaSubmissionHistory[]>>{
+export async function getSubmissionHistoryById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionHistory[]>> {
 
   const historySelect = [
     "id",
@@ -353,13 +377,13 @@ export async function getSubmissionHistoryById(supabase:SupabaseClient, id:strin
     "payload",
   ].join(",");
 
-  try{
-  const historyRes = await  supabase
-    .from("submission_history")
-    .select(historySelect)
-    .eq("submission_id", id)
-    .order("changed_at", { ascending: false })
-    .limit(40)
+  try {
+    const historyRes = await supabase
+      .from("submission_history")
+      .select(historySelect)
+      .eq("submission_id", id)
+      .order("changed_at", { ascending: false })
+      .limit(40)
     if (historyRes.error) {
       // TODO: investigate this former way of doing things:
       // if (isMissingWorkflowSchemaError(historyRes.error)) {
@@ -370,49 +394,49 @@ export async function getSubmissionHistoryById(supabase:SupabaseClient, id:strin
     }
     const loadedHistory = (historyRes.data ?? []) as unknown as VarroaSubmissionHistory[];
     return makeResultData(loadedHistory);
-  } catch (error){
-      return makeResultError( 
-          ErrorCode.DATABASE_CONNECTION_ERROR,
-          "Failed to communicate with the database.",
-          error instanceof Error ? error.message : String(error),
-      );
-  }
-}
-
-export async function getSubmissionReviewsById(supabase:SupabaseClient, id:string):Promise<Result<VarroaSubmissionReview[]>>{
-
-  try{
-    const reviewsRes = await supabase
-          .from("varroa_submission_reviews")
-          .select(
-            "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
-          )
-          .eq("submission_id", id)
-          .order("updated_at", { ascending: false })
-          .limit(20)
-
-    if (reviewsRes.error) {
-        // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-        //   setLoadError(getWorkflowMigrationMessage());
-        //   return;
-        // }
-        return supabaseErrorToResultError(reviewsRes.error);
-    }
-    const loadedReviews = (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
-    return makeResultData(loadedReviews);
-      
-  }catch (error){
-    return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
 
-export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:string):Promise<Result<VarroaSubmissionImageReview[]>>{
+export async function getSubmissionReviewsById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionReview[]>> {
 
-  try{
+  try {
+    const reviewsRes = await supabase
+      .from("varroa_submission_reviews")
+      .select(
+        "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
+      )
+      .eq("submission_id", id)
+      .order("updated_at", { ascending: false })
+      .limit(20)
+
+    if (reviewsRes.error) {
+      // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
+      //   setLoadError(getWorkflowMigrationMessage());
+      //   return;
+      // }
+      return supabaseErrorToResultError(reviewsRes.error);
+    }
+    const loadedReviews = (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
+    return makeResultData(loadedReviews);
+
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+export async function getSubmissionReviewImagesById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionImageReview[]>> {
+
+  try {
     const imageReviewsRes = await supabase
       .from("varroa_submission_review_images")
       .select(
@@ -423,21 +447,21 @@ export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:
       // burde være her heller?
       // .eq("created_by", authedActions.userId)
       .order("image_index", { ascending: true })
-      if (imageReviewsRes.error) {
-        // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-        //   setLoadError(getWorkflowMigrationMessage());
-        //   return;
-        // }
-        return supabaseErrorToResultError(imageReviewsRes.error);
-      }
-      const loadedImageReviews = (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
-      return makeResultData(loadedImageReviews);
+    if (imageReviewsRes.error) {
+      // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
+      //   setLoadError(getWorkflowMigrationMessage());
+      //   return;
+      // }
+      return supabaseErrorToResultError(imageReviewsRes.error);
+    }
+    const loadedImageReviews = (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
+    return makeResultData(loadedImageReviews);
 
-  }catch (error){
-     return makeResultError( 
-        ErrorCode.DATABASE_CONNECTION_ERROR,
-        "Failed to communicate with the database.",
-        error instanceof Error ? error.message : String(error),
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
     );
   }
 }
@@ -445,7 +469,7 @@ export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:
 export async function createSignedImages(
   supabase: SupabaseClient,
   imagePaths: string[],
-): Promise<Result<SignedImage[]>>{
+): Promise<Result<SignedImage[]>> {
   if (imagePaths.length === 0) return makeResultData([] as SignedImage[]);
 
   const signedRes = await supabase.storage

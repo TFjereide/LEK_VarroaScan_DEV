@@ -10,7 +10,7 @@ import { VarroaReviewData } from "./submissions-types";
 
 export interface SubmissionsRepository{
     insert(params: SubmissionSubmitParams): Promise<Result<SubmitVarroaScanResult>>;
-    listAll(sortBy: SubmissionSortType, page: number, limit: number): Promise<Result<VarroaSubmissionRecord[]>>;
+    listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus): Promise<Result<VarroaSubmissionRecord[]>>;
     getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
     updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;
     
@@ -25,9 +25,9 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
             return await submitVarroaScan(supabase, params);;
         },
         
-        async listAll(sortBy: SubmissionSortType, page: number, limit: number){
+        async listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus){
             // TODO: Params
-            return await getSubmissions(supabase);
+            return await getSubmissions(supabase, page, limit, sortBy, byStatus);
         },
         
         async getById(id:string){

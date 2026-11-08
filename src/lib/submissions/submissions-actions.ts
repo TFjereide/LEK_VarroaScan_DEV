@@ -1,9 +1,9 @@
 'use server';
 import { getCurrentUser } from "../auth/actions.server";
 import { getAuthorizedUserActions } from "../auth/roles.server";
-import { ErrorCode, makeResultError, Result } from "../result/result";
-import { SubmissionStatus } from "../varroaScanDb";
-import { SubmitVarroaScanResult } from "../varroaSubmissionsDb";
+import { getClient } from "../auth/supabase.server";
+import { ErrorCode, makeResultData, makeResultError, Result, supabaseErrorToResultError } from "../result/result";
+import { SubmitVarroaScanResult, SubmissionStatus  } from "../varroaSubmissionsDb";
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { getSubmissionsService } from "./submissions-service";
@@ -24,7 +24,7 @@ export async function submit(input: SubmissionSubmitParams):Promise<Result<Submi
     return await submissionsService.submit(input);
 }
 
-export async function listAll(sortBy: SubmissionSortType, page: number, limit: number):Promise<Result<VarroaSubmissionRecord[]>>{
+export async function listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus):Promise<Result<VarroaSubmissionRecord[]>>{
     const authData = await getCurrentUser()
     if (!authData.user){
         return makeResultError(ErrorCode.AUTH_UNAUTHORIZED, "unauthorized");
@@ -35,7 +35,7 @@ export async function listAll(sortBy: SubmissionSortType, page: number, limit: n
     }
 
     const submissionsService = await getSubmissionsService();
-    return await submissionsService.listAll(sortBy,page,limit);
+    return await submissionsService.listAll(page,limit,sortBy, byStatus);
 }
 
 export async function getById(id:string):Promise<Result<VarroaSubmissionRecord|null>>{
@@ -99,4 +99,26 @@ export async function getReviewDataById(id:string): Promise<Result<VarroaReviewD
         return makeResultError(ErrorCode.AUTH_FORBIDDEN, "forbidden");
     }   const submissionsService = await getSubmissionsService();
     return await submissionsService.getReviewDataById(id);
+}
+
+// TODO: Move to db layer. Not the righ place to have the logic here. 
+export async function claimNextSubmission(): Promise<Result<string|null>>{
+    const authData = await getCurrentUser()
+    if (!authData.user){
+        return makeResultError(ErrorCode.AUTH_UNAUTHORIZED, "unauthorized");
+    }
+
+    const actions = await getAuthorizedUserActions(authData.user)
+    if(!actions.canUseQueue){
+        return makeResultError(ErrorCode.AUTH_FORBIDDEN, "forbidden");
+    }
+
+    const supabase = await getClient();
+    const res = await supabase.rpc("varroa_claim_next_submission");
+
+    if (res.error) {
+        return supabaseErrorToResultError(res.error);
+    }
+
+    return makeResultData(res.data);
 }

@@ -29,7 +29,8 @@ import { getSubmissionSelect, VarroaSubmissionHistory, VarroaSubmissionImageRevi
  *  - legger til submissions.status og submissions.type
  *  - legger til images.created_at
  *  - oppretter storage-bucket "varroa-submissions" + RLS-policies
- */
+* @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+*/
 
 export const SUBMISSIONS_BUCKET = "varroa-submissions";
 
@@ -63,7 +64,10 @@ const SUBMISSION_SELECT = [
     "images(*)",
   ].join(",");
 
-/** Admin-oversikt: alle innsendinger, nyeste først. */
+/** 
+ * Admin-oversikt: alle innsendinger, nyeste først. 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+*/
 export async function getSubmissions(
   supabase: SupabaseClient,
   limit = 200,
@@ -89,7 +93,12 @@ export async function getSubmissions(
       return [];
     }
 }
-
+/**
+ * 
+ * @param supabase 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient): Promise<number>{
   try{
     const availableResRaw = await supabase.rpc("varroa_available_new_count");
@@ -106,7 +115,10 @@ export async function getAvailableNewSubmissionsCount(supabase: SupabaseClient):
 }
 
 
-/** Admin-detalj: én innsending med alle bilder, sortert i riktig rekkefølge. */
+/**
+ * Admin-detalj: én innsending med alle bilder, sortert i riktig rekkefølge. 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts  
+*/
 export async function getSubmissionById(
   supabase: SupabaseClient,
   id: string,
@@ -146,7 +158,9 @@ export async function updateSubmissionStatus(
   if (res.error) throw res.error;
 }
 
-/** Signerte URL-er for en liste bildestier. Returnerer et path -> url-kart. */
+/** Signerte URL-er for en liste bildestier. Returnerer et path -> url-kart. 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+*/
 export async function getSignedImageUrls(
   supabase: SupabaseClient,
   paths: string[],
@@ -213,7 +227,8 @@ export type SubmitVarroaScanResult = {
  * og oppretter én rad per bilde i "images".
  *
  * Ubegrenset antall bilder - ingen kunstig grense (jf. kravspek §9).
- */
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+*/
 export async function submitVarroaScan(
   supabase: SupabaseClient,
   input: SubmitVarroaScanInput,
@@ -252,6 +267,13 @@ export async function submitVarroaScan(
   return { submissionId, imagePaths };
 }
 
+/**
+ * 
+ * @param supabase 
+ * @param userId 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getNextsubmissionId(supabase :SupabaseClient, userId:string){
 
   if(userId){
@@ -274,6 +296,13 @@ export async function getNextsubmissionId(supabase :SupabaseClient, userId:strin
 
 }
 
+/**
+ * 
+ * @param supabase 
+ * @param userId 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getNextsubmissionForControlId(supabase :SupabaseClient, userId:string){
   // GAMMEL: .from("varroa_submissions"), og sorterte en bar
   // .select("id")-spørring på "created_at" - som bare er et alias fra
@@ -294,7 +323,13 @@ export async function getNextsubmissionForControlId(supabase :SupabaseClient, us
     return reviewId;
 }
 
-
+/**
+ * 
+ * @param supabase 
+ * @param id 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getSubmissionHistoryById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionHistory[]>{
 
   const historySelect = [
@@ -333,6 +368,13 @@ export async function getSubmissionHistoryById(supabase:SupabaseClient, id:strin
   return [];
 }
 
+/**
+ * 
+ * @param supabase 
+ * @param id 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getSubmissionReviewsById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionReview[]>{
 
   try{
@@ -361,6 +403,13 @@ export async function getSubmissionReviewsById(supabase:SupabaseClient, id:strin
   return [];
 }
 
+/**
+ * 
+ * @param supabase 
+ * @param id 
+ * @returns 
+ * @deprecated do not use this. New functions in varroaSubmissionsDb.ts 
+ */
 export async function getSubmissionReviewImagesById(supabase:SupabaseClient, id:string):Promise<VarroaSubmissionImageReview[]>{
 
   try{
