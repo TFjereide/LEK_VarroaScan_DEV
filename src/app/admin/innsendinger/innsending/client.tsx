@@ -47,7 +47,6 @@ import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 import { Database } from "@/lib/supabase/database.types";
-import { getSubmissionById, getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "@/lib/varroaScanDb";
 import { getReviewDataById } from "@/lib/submissions/submissions-actions";
 import { VarroaReviewData } from "@/lib/submissions/submissions-types";
 

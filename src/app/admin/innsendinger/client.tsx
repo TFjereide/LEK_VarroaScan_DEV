@@ -22,7 +22,7 @@ import { useAuth } from "@/app/auth-provider";
 import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 import { PostgrestResponse } from "@supabase/supabase-js";
-import { getSubmissions, getAvailableNewSubmissionsCount, getNextsubmissionForControlId, getNextsubmissionId } from "@/lib/varroaScanDb";
+import { getCount, getNext, listAll } from "@/lib/submissions/submissions-actions";
 
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
@@ -111,48 +111,22 @@ export function AdminQueueClient() {
   const view = (searchParams.get("view") as QueueView | null) ?? "all";
 
   const fetchItems = async () => {
-    // console.log("Fetching items");
     const [submissionsRes, availableCountRes] = await Promise.all([
-      getSubmissions(supabase),
-      getAvailableNewSubmissionsCount(supabase)
+      listAll(0,0),
+      getCount("available-new")
     ]);
-    setAvailableNewCount(availableCountRes);
-    setItemsUnfiltered(submissionsRes);
-
-    // try {
-      // const [submissionsResRaw, availableResRaw] = await Promise.all([
-      //   supabase
-      //     .from("submissions")
-      //     .select(getSubmissionSelect())
-      //     .order("updated_at", { ascending: false })
-      //     .limit(500),
-      //   supabase.rpc("varroa_available_new_count"),
-      // ]);
-
-      // console.log("submissionsResRaw:", submissionsResRaw);
-      // console.log("availableResRaw:", availableResRaw);
-
-      // const submissionsRes = submissionsResRaw as PostgrestResponse<VarroaSubmissionRecord>;
-      // const availableRes = availableResRaw as PostgrestResponse<number>;
-
-      // if (submissionsRes.error) {
-      //   console.error("Failed to fetch submissions:", submissionsRes.error);
-      // } else {
-      //   const fetchedItems = submissionsRes.data ?? [];
-      //   setItemsUnfiltered(fetchedItems);
-      //   console.log("Fetched items: ", itemsUnfiltered);
-      // }
-
-      // if (!availableRes.success) {
-      //   console.error("Failed to fetch submissions count:", availableRes.error)
-      // } else {
-      //   const availableCount = availableRes.data[0] ?? 0;
-      //   setAvailableNewCount(availableCount);
-      //   console.log("Fetched items count: ", availableNewCount)
-      // }
-    // } catch (e) {
-
-    // }
+    if(!submissionsRes.success){
+      setLoadError(submissionsRes.error.message);
+      setAvailableNewCount(0);
+      return;
+    }
+    if(!availableCountRes.success){
+      setLoadError(availableCountRes.error.message);
+      setItemsUnfiltered([]);
+      return;
+    }
+    setAvailableNewCount(availableCountRes.data);
+    setItemsUnfiltered(submissionsRes.data);
   }
 
   // TODO:
@@ -186,7 +160,7 @@ export function AdminQueueClient() {
   }, [])
 
 
-  // TODO:
+  // TODO: The control flow is slightly unreadable here. Would be good to clarify.
   const openNextSubmission = async () => {
     console.log("next submission: ", itemsUnfiltered.length)
 
@@ -196,20 +170,12 @@ export function AdminQueueClient() {
     try {
       const userId = user.user_id;
       if (userId) {
-        // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
-        // er en ekte kolonne, så sorteringen trengte ingen endring.
-        // const underWorkRes = await supabase
-        //   .from("submissions")
-        //   .select("id")
-        //   .eq("status", "UNDER_ARBEID")
-        //   .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
-        //   .order("updated_at", { ascending: true })
-        //   .limit(1)
-        //   .maybeSingle();
-
-        // if (underWorkRes.error) throw underWorkRes.error;
-        // const resumeId = String(underWorkRes.data?.id ?? "");
-        const resumeId = await getNextsubmissionId(supabase, userId);
+        const resumeIdRes = await getNext(userId, "UNDER_ARBEID");
+        if (!resumeIdRes.success){
+          setLoadError(resumeIdRes.error.message);
+          return;
+        }
+        const resumeId = resumeIdRes.data;
         if (resumeId) {
           window.location.assign(
             appendAdminContext(
@@ -219,24 +185,13 @@ export function AdminQueueClient() {
           );
           return;
         }
-
-        if (authedActions.canControl) {
-          // GAMMEL: .from("varroa_submissions"), og sorterte en bar
-          // .select("id")-spørring på "created_at" - som bare er et alias fra
-          // getSubmissionSelect() og ikke finnes utenfor den. NY: riktig
-          // // tabellnavn + sortering på den ekte kolonnen submission_date.
-          // const reviewRes = await supabase
-          //   .from("submissions")
-          //   .select("id")
-          //   .eq("status", "KLAR_FOR_KONTROLL")
-          //   .neq("processed_by", userId ?? "")
-          //   .order("submission_date", { ascending: true })
-          //   .limit(1)
-          //   .maybeSingle();
-  
-          // if (reviewRes.error) throw reviewRes.error;
-          // const reviewId = String(reviewRes.data?.id ?? "");
-          const reviewId = await getNextsubmissionForControlId(supabase, userId)
+        if (authedActions.canControl) {        
+          const reviewIdRes = await getNext(userId, "KLAR_FOR_KONTROLL");
+          if (!reviewIdRes.success){
+            setLoadError(reviewIdRes.error.message);
+            return;
+          }
+          const reviewId = reviewIdRes.data;
           if (reviewId) {
             window.location.assign(
               appendAdminContext(
@@ -247,7 +202,6 @@ export function AdminQueueClient() {
             return;
           }
         }
-
       }
 
       const res = await supabase.rpc("varroa_claim_next_submission");
