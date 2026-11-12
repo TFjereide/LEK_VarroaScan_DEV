@@ -19,10 +19,10 @@ import {
 } from "@/lib/varroaWorkflow";
 
 import { useAuth } from "@/app/auth-provider";
-import { getClient } from "@/lib/auth/supabase.client";
+// import { getClient } from "@/lib/auth/supabase.client";
 import { SubmissionListItemcard } from "@/components/submissions/submissionListItemCard";
 import { PostgrestResponse } from "@supabase/supabase-js";
-import { getCount, getNext, listAll } from "@/lib/submissions/submissions-actions";
+import { claimNextSubmission, deleteSubmission, getCount, getNext, listAll } from "@/lib/submissions/submissions-actions";
 
 type QueueView = "all" | "mine" | "kontroll" | "training" | "archive";
 
@@ -33,7 +33,7 @@ export function AdminQueueClient() {
 
   const searchParams = useSearchParams();
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-  const supabase = getClient();
+  // const supabase = getClient();
   const adminContextSearch = useMemo(() => {
     if (typeof window === "undefined") return "";
     return getAdminContextSearch(window.location.search);
@@ -84,13 +84,18 @@ export function AdminQueueClient() {
     }
 
     // TODO:
-    if (!supabase) return;
+    // if (!supabase) return;
     setDeletingId(id);
     try {
-      const res = await supabase.rpc("varroa_delete_submission_as_admin", {
-        p_submission_id: id,
-      });
-      if (res.error) throw res.error;
+      const deleteResult = await deleteSubmission(id);
+      if(!deleteResult.success){
+        setLoadError(deleteResult.error.message);
+        return
+      }
+      // const res = await supabase.rpc("varroa_delete_submission_as_admin", {
+      //   p_submission_id: id,
+      // });
+      // if (res.error) throw res.error;
       setItemsUnfiltered((prev) => prev.filter((x) => x.id !== id));
     } catch (e: unknown) {
       let msg = "Ukjent feil";
@@ -106,7 +111,7 @@ export function AdminQueueClient() {
     } finally {
       setDeletingId(null);
     }
-  }, [supabase]);
+  }, []);
 
   const view = (searchParams.get("view") as QueueView | null) ?? "all";
 
@@ -134,10 +139,10 @@ export function AdminQueueClient() {
     
     setLoadError(null);
 
-    if (!supabase) {
-      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+    // if (!supabase) {
+    //   setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+    //   return;
+    // }
 
     setIsLoading(true);
     try {
@@ -153,7 +158,7 @@ export function AdminQueueClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [adminLoginHref, supabase]);
+  }, [adminLoginHref]);
 
   useEffect(() => {
     void fetchItems()
@@ -164,7 +169,6 @@ export function AdminQueueClient() {
   const openNextSubmission = async () => {
     console.log("next submission: ", itemsUnfiltered.length)
 
-    if (!supabase) return;
     setLoadError(null);
     setIsLoading(true);
     try {
@@ -203,16 +207,12 @@ export function AdminQueueClient() {
           }
         }
       }
-
-      const res = await supabase.rpc("varroa_claim_next_submission");
-      if (res.error) {
-        if (isMissingWorkflowSchemaError(res.error)) {
-          setLoadError(getWorkflowMigrationMessage());
-          return;
-        }
-        throw res.error;
+      const claimResult = await claimNextSubmission();
+      if (!claimResult.success){
+        setLoadError(claimResult.error.message);
+        return;
       }
-      const nextId = String(res.data ?? "");
+      const nextId = String(claimResult.data ?? "");
       if (!nextId) {
         setLoadError("Ingen ledige nye saker akkurat nå.");
         await reload();

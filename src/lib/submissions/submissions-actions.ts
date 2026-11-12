@@ -122,3 +122,27 @@ export async function claimNextSubmission(): Promise<Result<string|null>>{
 
     return makeResultData(res.data);
 }
+
+// TODO: Move to db layer. Not the righ place to have the logic here. 
+export async function deleteSubmission(id : string): Promise<Result<null>>{
+    const authData = await getCurrentUser()
+    if (!authData.user){
+        return makeResultError(ErrorCode.AUTH_UNAUTHORIZED, "unauthorized");
+    }
+
+    const actions = await getAuthorizedUserActions(authData.user)
+    if(!actions.canDeleteAnything){
+        return makeResultError(ErrorCode.AUTH_FORBIDDEN, "forbidden");
+    }
+
+    const supabase = await getClient();
+    const res = await supabase.rpc("varroa_delete_submission_as_admin", {
+        p_submission_id: id,
+      });
+
+    if (res.error) {
+        return supabaseErrorToResultError(res.error);
+    }
+
+    return makeResultData(null);
+}
