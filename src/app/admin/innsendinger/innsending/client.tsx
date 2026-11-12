@@ -86,7 +86,7 @@ export function ProductionSubmissionClient() {
   const id = searchParams.get("id");
   const returnTo = searchParams.get("returnto") ?? `${basePath}/admin/innsendinger`;
 
-  const supabase = getClient();
+  // const supabase = getClient();
 
   const adminContextSearch = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -146,10 +146,10 @@ export function ProductionSubmissionClient() {
       setLoadError("Mangler id i URL. Bruk ?id=<uuid>.");
       return;
     }
-    if (!supabase) {
-      setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+    // if (!supabase) {
+    //   setLoadError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+    //   return;
+    // }
 
     setIsLoading(true);
     try {
@@ -236,7 +236,7 @@ export function ProductionSubmissionClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [adminLoginHref, id, supabase]);
+  }, [adminLoginHref, id]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -288,10 +288,10 @@ export function ProductionSubmissionClient() {
     setSaveError(null);
     setSaveOk(null);
 
-    if (!supabase) {
-      setSaveError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
-      return;
-    }
+    // if (!supabase) {
+    //   setSaveError("Mangler Supabase-konfig (NEXT_PUBLIC_SUPABASE_*).");
+    //   return;
+    // }
     if (!isOnline) {
       setSaveError("Du er offline. Kan ikke lagre.");
       return;

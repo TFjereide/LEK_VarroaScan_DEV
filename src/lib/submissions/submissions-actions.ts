@@ -89,6 +89,8 @@ export async function getCount(countType : SubmissionCountType): Promise<Result<
     return await submissionsService.getCount(countType);
 }
 
+
+
 export async function getReviewDataById(id:string): Promise<Result<VarroaReviewData>>{
     const authData = await getCurrentUser()
     if (!authData.user){
@@ -145,4 +147,56 @@ export async function deleteSubmission(id : string): Promise<Result<null>>{
     }
 
     return makeResultData(null);
+}
+
+
+// TODO: Move to db layer. Not the righ place to have the logic here. 
+export async function submitReview(reviewPayload : any, imageReviewRows: any, updatePatch: any) : Promise<Result<string>>{
+
+    const supabase = await getClient();
+    const reviewRes = await supabase
+        .from("varroa_submission_reviews")
+        .upsert(reviewPayload, {
+            onConflict: "submission_id,created_by",
+        })
+        .select("id")
+        .single();
+    
+    if (reviewRes.error) return supabaseErrorToResultError(reviewRes.error);
+    const reviewId = String(reviewRes.data.id);
+
+    const imageReviewRes = await supabase
+        .from("varroa_submission_review_images")
+        .upsert(imageReviewRows, {
+          onConflict: "review_id,image_index",
+          defaultToNull: false,
+        });
+    if (imageReviewRes.error) return supabaseErrorToResultError(imageReviewRes.error);
+    const updateRes = await supabase
+        .from("submissions")
+        .update(updatePatch)
+        .eq("id", item.id);
+
+    if (updateRes.error) return supabaseErrorToResultError(updateRes.error);
+    const historyRes = await supabase.from("submission_history").insert({
+        submission_id: item.id,
+        changed_by: authedActions.userId,
+        action: historyAction,
+        from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
+        to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
+        comment: historyComment,
+        payload: {
+            role: authedActions?.role,
+            mite_count: currentMiteCount,
+            image_quality: currentDraft.imageQuality || null,
+            training_ready: nextTrainingReady,
+            approved,
+            current_image_index: nextImageIndex,
+            total_images: images.length,
+        },
+        });
+    if (historyRes.error) throw historyRes.error;
+
+
+    return makeResultData(reviewId);
 }
