@@ -19,6 +19,8 @@ import { PhototypeSection } from "@/components/phototypeSection";
 import { SubmissionButtonSection } from "@/components/submissionButtonSection";
 import { AfterSubmissionSection } from "@/components/afterSubmissionSection";
 import { useAuth } from "./auth-provider";
+import { getDetector } from "@/lib/roboflow";
+import { analyzeImage } from "@/lib/roboflow/actions";
 
 
 export default function Home() {
@@ -226,7 +228,9 @@ export default function Home() {
     }, 120);
   };
 
-  const onPickImages = (
+
+  
+  const onPickImages = async (
     files: FileList | null,
     options?: { reopenCamera?: boolean },
   ) => {
@@ -251,12 +255,7 @@ export default function Home() {
       note: "",
       noteOpen: false,
     }));
-    
-    { // Test for roboflow
-      const im = next[0];
-      getDetector()
-
-    }
+   
 
     setImages((prev) => [...prev, ...next]);
 
@@ -328,7 +327,7 @@ export default function Home() {
     try {
       // NY (mot ny database - submissions + images via lib/varroaScanDb.ts):
       const noteValue = note.trim() ? note.trim() : null;
-
+       
       const submitResult =  await submit({
         files: images.map((img) => img.file),
         note: noteValue,
@@ -343,13 +342,14 @@ export default function Home() {
         return;
       }
 
-      const { submissionId, imagePaths } = submitResult.data;
+      const { submissionId, imagePaths, count } = submitResult.data;
 
       setLastSubmissionInfo({
         id: submissionId,
         type: submissionType,
         note: noteValue,
         imagesCount: imagePaths.length,
+        miteCount: count,
       });
 
       setDidSubmit(true);

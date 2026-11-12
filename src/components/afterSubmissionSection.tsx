@@ -32,6 +32,7 @@ export function AfterSubmissionSection({returnUrl, returnLabel, isOnline, submis
               <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-200">
                 <div>Type: {sentTypeLabel}</div>
                 <div>Antall bilder: {submissionInfo.imagesCount}</div>
+                <div>Antall midd: {submissionInfo.miteCount}</div>
                 <div className="mt-2 text-zinc-300">
                   Kommentar: {submissionInfo.note ? submissionInfo.note : "Ingen"}
                 </div>

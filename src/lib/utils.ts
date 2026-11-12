@@ -18,6 +18,7 @@ export type SubmissionInfo = {
     type: SubmissionType;
     note: string | null;
     imagesCount: number;
+    miteCount?:number;
 };
 
 

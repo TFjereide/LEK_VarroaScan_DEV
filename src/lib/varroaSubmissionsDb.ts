@@ -3,6 +3,7 @@ import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmis
 import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "./result/result";
 import { SubmissionSortType } from "./submissions/submissions-controller";
 import { Database } from "./supabase/database.types";
+import { VarroaAnalysisResult } from "./submissions/submissions-types";
 
 
 // (TGF)TODO: 
@@ -249,6 +250,7 @@ export type SubmitVarroaScanInput = {
 export type SubmitVarroaScanResult = {
   submissionId: string;
   imagePaths: string[];
+  count?: number;
 };
 
 /**
@@ -305,6 +307,10 @@ export async function submitVarroaScan(
       error instanceof Error ? error.message : String(error),
     );
   }
+}
+
+export async function InsertImageAnalysisResult(analysisResult: VarroaAnalysisResult):Promise<Result<VarroaAnalysisResult>>{
+  return makeResultError(ErrorCode.NOT_IMPLEMENTED, "InsertImageAnalysisResult");
 }
 
 export async function getNextsubmissionId(supabase: SupabaseClient, userId: string, byStatus: SubmissionStatus): Promise<Result<string>> {

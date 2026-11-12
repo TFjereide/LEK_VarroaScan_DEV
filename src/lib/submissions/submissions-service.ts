@@ -3,9 +3,10 @@ import { SubmitVarroaScanResult } from "../varroaSubmissionsDb";
 import {  SubmissionStatus } from "../varroaSubmissionsDb";
 import {createSubmissionsRepository, SubmissionsRepository } from "./submissions-repository";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
-import { Result } from "../result/result";
+import { ErrorCode, makeResultData, makeResultError, Result } from "../result/result";
 import { VarroaReviewData } from "./submissions-types";
 import { getClient } from "../auth/supabase.server";
+import { getDetector } from "../roboflow";
 
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
@@ -20,10 +21,48 @@ export interface SubmissionsService {
     getReviewDataById(id:string): Promise<Result<VarroaReviewData>>;
 }
 
+async function analyzeImage(image: File){ 
+    const detector = getDetector();
+    const bytes = new Uint8Array(await image.arrayBuffer());
+    const result = await detector.analyze(bytes);
+    console.log({
+        type: image.type,
+        size: image.size,
+        firstBytes: Array.from(bytes.slice(0, 8)),
+    });
+    return result.count > result.countHigh? result.count : result.countHigh;
+}
+
 export function createSubmissionsService(repository: SubmissionsRepository):SubmissionsService{
     return {
         async submit(input: SubmissionSubmitParams){
-            return await repository.insert(input);
+            const file = input.files[0];
+            // const result = await repository.insert(input)
+            // if (!result.success) return result;
+            // 
+            let count = -1;
+            try{
+                count = await analyzeImage(file);
+            }catch(error){
+                return makeResultError(
+                    ErrorCode.INTERNAL_ERROR,
+                    "ROBOFLOW ERROR",
+                    error instanceof Error ? error.message : String(error),
+                )
+            }
+            
+            // result.data = {
+                // submissionId: result.data.submissionId,
+                // imagePaths: result.data.imagePaths,
+                // count: count,
+            // };
+            
+            // return result ;
+            return makeResultData({
+                submissionId: "",
+                imagePaths: [],
+                count: count,
+            });
         },
 
         async listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus){
