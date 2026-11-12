@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
   experimental: {
     turbopackFileSystemCacheForDev: false,
     turbopackFileSystemCacheForBuild: false,
+    serverActions:{
+      bodySizeLimit: "10mb",
+    }
   },
   trailingSlash: true,
   basePath,
