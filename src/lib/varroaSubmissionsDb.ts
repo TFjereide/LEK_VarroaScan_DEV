@@ -1,9 +1,11 @@
+import "server-only";
 import type { PostgrestResponse, PostgrestSingleResponse, SupabaseClient } from "@supabase/supabase-js";
 import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "./varroaWorkflow";
 import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "./result/result";
 import { SubmissionSortType } from "./submissions/submissions-controller";
 import { Database } from "./supabase/database.types";
 import { VarroaAnalysisResult } from "./submissions/submissions-types";
+import { VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 
 
 // (TGF)TODO: 
@@ -172,6 +174,35 @@ export async function updateSubmissionStatus(
 ): Promise<void> {
   const res = await supabase.from("submissions").update({ status }).eq("id", id);
   if (res.error) throw res.error;
+}
+
+type UpdateSubmissionParams = Partial<
+  Omit<
+    Database["public"]["Tables"]["submissions"]["Insert"], 
+    "id" | "submission_date"
+  >
+>;
+
+export async function updateSubmissionById(
+  supabase: SupabaseClient<Database>,
+  id: string,
+  params: UpdateSubmissionParams,
+): Promise<Result<null>> {
+  try {  
+    const res = await supabase
+      .from("submissions")
+      .update(params)
+      .eq("id", id);
+    if (res.error) supabaseErrorToResultError(res.error);    
+    return makeResultData(null);
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }  
+
 }
 
 /** Signerte URL-er for en liste bildestier. Returnerer et path -> url-kart. */
@@ -476,6 +507,51 @@ export async function getSubmissionReviewImagesById(supabase: SupabaseClient, id
     );
   }
 }
+
+type ImageNotes = {
+    image_index: number;
+    mite_count: number | null;
+    image_quality: string | null;
+    comment: string | null;
+    training_ready: boolean;
+    approved: boolean;
+    annotations: VarroaBoundingBox[];
+}[]
+
+type ReviewUpsertParams = {
+        submission_id: string;
+        created_by: string;
+        mite_count: number;
+        image_quality: string | null;
+        comment: string | null;
+        training_ready: boolean;
+        approved: boolean;
+        current_image_index: number;
+        image_notes: ImageNotes
+      };
+
+export async function reviewUpsert(supabase: SupabaseClient<Database>, params : ReviewUpsertParams): Promise<Result<string>>{
+  try {
+    const reviewRes = await supabase
+        .from("varroa_submission_reviews")
+        .upsert(params, {
+          onConflict: "submission_id,created_by",
+        })
+        .select("id")
+        .single();
+
+      if (reviewRes.error) return supabaseErrorToResultError(reviewRes.error);
+      return makeResultData(reviewRes.data.id);
+
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 
 export async function createSignedImages(
   supabase: SupabaseClient,

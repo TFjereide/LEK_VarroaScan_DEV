@@ -11,7 +11,7 @@ export async function getClient(): Promise<SupabaseClient<Database>>{
 
     return createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+        process.env.SUPABASE_SECRET_KEY!,
         {
             cookies: {
                 getAll() {

@@ -63,26 +63,26 @@ export default function Home() {
   const appVersion = useMemo(() => getAppVersion(), []);
   const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
+  // TODO: Find out if this is even needed.
   const [sourceParam, setSourceParam] = useState<string | null>(null);
-  const [authRedirectPath, setAuthRedirectPath] = useState<string | null>(null);
-  const [isMagicLinkLanding, setIsMagicLinkLanding] = useState(false);
+  // const [authRedirectPath, setAuthRedirectPath] = useState<string | null>(null);
+  // const [isMagicLinkLanding, setIsMagicLinkLanding] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-
     setSubmissionType(utils.normalizeType(params.get("type")));
 
     setSourceParam(
       utils.normalizeSource(params.get("source"))
     );
 
-    setAuthRedirectPath(
-      utils.normalizeInternalRedirectPath(params.get("authRedirect"))
-    );
+    // setAuthRedirectPath(
+    //   utils.normalizeInternalRedirectPath(params.get("authRedirect"))
+    // );
 
-    setIsMagicLinkLanding(
-      utils.hasMagicLinkHash(window.location.hash)
-    );
+    // setIsMagicLinkLanding(
+    //   utils.hasMagicLinkHash(window.location.hash)
+    // );
   }, []);
 
   const isFromBiensVokter = () => utils.isLikelyFromBiensVokter(returnUrl, sourceParam);
@@ -92,101 +92,8 @@ export default function Home() {
     return utils.MOBILE_CAMERA_LOOP_RE.test(window.navigator.userAgent ?? "");
   }, []);
 
-
-
-  // AUTH redirection
-  // useEffect(() => {
-  //   // Nothing to do unless we've been given a redirect destination.
-  //   if (!authRedirectPath) return;
-
-  //   // Get the browser-side Supabase client. If it isn't available,
-  //   // we can't check authentication or subscribe to auth changes.
-  //   const supabase = getSupabaseClient();
-  //   if (!supabase) return;
-
-
-  //   // These variables belong to this particular invocation of the effect.
-  //   //
-  //   // `active` prevents an async callback from doing anything after
-  //   // the effect has been cleaned up.
-  //   //
-  //   // `redirected` prevents multiple auth events from causing multiple
-  //   // redirects.
-  //   let active = true;
-  //   let redirected = false;
-  //   const target = `${basePath}${authRedirectPath}`;
-
-  //   // Perform the redirect once we have a logged-in user.
-  //   const redirectIfReady = (session: { user?: unknown } | null) => {
-  //     if (!active || redirected || !session?.user) return;
-  //     redirected = true;
-  //     window.location.replace(target);
-  //   };
-
-  //   // Check whether we're already authenticated.
-  //   //
-  //   // This handles the case where the user was already logged in
-  //   // when this component mounted.
-  //   void supabase.auth.getSession().then(({ data }) => {
-  //     redirectIfReady(data.session);
-  //   });
-
-  //   // Also listen for future authentication changes.
-  //   //
-  //   // For example, the user might log in after the component has mounted.
-  //   const {
-  //     data: { subscription },
-  //   } = supabase.auth.onAuthStateChange((_event, session) => {
-  //     redirectIfReady(session);
-  //   });
-
-
-  //   // Clean up when the component unmounts or when one of the
-  //   // dependencies changes.
-  //   //
-  //   // Without this, the auth listener would remain subscribed and
-  //   // could continue trying to redirect after this component is gone.
-  //   return () => {
-  //     active = false;
-  //     subscription.unsubscribe();
-  //   };
-  // }, [authRedirectPath, basePath]);
-
-  // useEffect(() => {
-  //   if (authRedirectPath || !isMagicLinkLanding) return;
-
-  //   const supabase = getSupabaseClient();
-  //   if (!supabase) return;
-
-  //   let active = true;
-  //   let redirected = false;
-  //   const target = `${basePath}/admin/innsendinger/`;
-
-  //   const redirectIfAdmin = async (
-  //     session: Awaited<ReturnType<typeof supabase.auth.getSession>>["data"]["session"],
-  //   ) => {
-  //     if (!session?.user) return;
-  //     if (!active || redirected || !isAdmin) return;
-  //     redirected = true;
-  //     window.location.replace(target);
-  //   };
-
-  //   void supabase.auth.getSession().then(({ data }) => {
-  //     void redirectIfAdmin(data.session);
-  //   });
-
-  //   const {
-  //     data: { subscription },
-  //   } = supabase.auth.onAuthStateChange((_event, session) => {
-  //     void redirectIfAdmin(session);
-  //   });
-
-  //   return () => {
-  //     active = false;
-  //     subscription.unsubscribe();
-  //   };
-  // }, [authRedirectPath, basePath, isMagicLinkLanding]);
-
+  // Detects when the mobile virtual keyboard is likely open and calculates how many pixels a 
+  // bottom overlay should be lifted to avoid being covered by it.
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -210,6 +117,9 @@ export default function Home() {
     };
   }, []);
 
+  // Ensures that a pending camera timer is cancelled when the component unmounts.
+  // Without this cleanup, a scheduled camera callback could execute after the component has 
+  // unmounted, potentially causing unwanted work or state updates.
   useEffect(() => {
     return () => {
       if (cameraLoopTimerRef.current != null) {
@@ -218,6 +128,11 @@ export default function Home() {
     };
   }, []);
 
+  // Reopens the camera after a 120ms delay, but only if automatic camera reopening is allowed.
+  // It gives the browser a brief moment to finish its current UI operation before attempting to 
+  // reopen the camera.
+  // Important: This doesn't guarantee the camera will open. Browser permissions, user interaction 
+  // requirements, and device availability can still prevent it.
   const reopenCamera = () => {
     if (!canAutoReopenCamera) return;
     if (cameraLoopTimerRef.current != null) {

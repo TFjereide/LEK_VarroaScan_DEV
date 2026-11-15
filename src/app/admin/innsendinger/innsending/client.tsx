@@ -8,7 +8,7 @@ import {
   getAdminContextSearch,
   getAdminReturnInfo,
 } from "@/lib/adminNavigation";
-import { getSupabaseClient } from "@/lib/supabaseClient";
+// import { getSupabaseClient } from "@/lib/supabaseClient";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import {
   createSignedImages,
@@ -43,7 +43,7 @@ import {
 import { ZoomableAnnotatedImage } from "@/components/submissions/zoomableAnnotatedImage"
 
 import { useAuth } from "@/app/auth-provider";
-import { getClient } from "@/lib/auth/supabase.client";
+// import { getClient } from "@/lib/auth/supabase.client";
 import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFromImageNotes, ImageReviewDraft, VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 import { Database } from "@/lib/supabase/database.types";
@@ -383,27 +383,7 @@ export function ProductionSubmissionClient() {
     type SubmissionUpdate = Database["public"]["Tables"]["submissions"]["Update"];
 
 
-    // GAMMEL: updatePatch skrev manual_mite_count/quality_rating/
-    // review_comment/current_role_owner samt assigned_at/processed_at/
-    // approved_by/approved_at/returned_by/returned_at til submissions.
-    // NY: de fire første flyttet til per-bilde-review (allerede lagret via
-    // reviewPayload/imageReviewRows under), og de seks siste finnes ikke
-    // som kolonner lenger - "hvem/når" for statusbytter er nå raden vi
-    // uansett setter inn i submission_history rett under. updatePatch
-    // beholder derfor bare de kolonnene som faktisk finnes på submissions.
-    const updatePatch: SubmissionUpdate = {
-      status: isVarroaSubmissionStatus(nextStatus) ? nextStatus: "UNDER_ARBEID",
-      training_ready: nextTrainingReady,
-    };
-
-    if (action === "SAVE_DRAFT" || action === "READY_FOR_REVIEW" || action === "SAVE_AND_NEXT") {
-      updatePatch.assigned_to = item.assigned_to ?? authedActions.userId;
-      updatePatch.processed_by = authedActions.userId;
-    }
-
-    if (action === "RETURNED") {
-      updatePatch.assigned_to = item.processed_by ?? item.assigned_to;
-    }
+   
 
     setIsSaving(true);
     const userId = authedActions.userId;
@@ -496,6 +476,30 @@ export function ProductionSubmissionClient() {
 
       if (imageReviewRes.error) throw imageReviewRes.error;
 
+
+      // GAMMEL: updatePatch skrev manual_mite_count/quality_rating/
+      // review_comment/current_role_owner samt assigned_at/processed_at/
+      // approved_by/approved_at/returned_by/returned_at til submissions.
+      // NY: de fire første flyttet til per-bilde-review (allerede lagret via
+      // reviewPayload/imageReviewRows under), og de seks siste finnes ikke
+      // som kolonner lenger - "hvem/når" for statusbytter er nå raden vi
+      // uansett setter inn i submission_history rett under. updatePatch
+      // beholder derfor bare de kolonnene som faktisk finnes på submissions.
+      const updatePatch: SubmissionUpdate = {
+        status: isVarroaSubmissionStatus(nextStatus) ? nextStatus: "UNDER_ARBEID",
+        training_ready: nextTrainingReady,
+      };
+
+      if (action === "SAVE_DRAFT" || action === "READY_FOR_REVIEW" || action === "SAVE_AND_NEXT") {
+        updatePatch.assigned_to = item.assigned_to ?? authedActions.userId;
+        updatePatch.processed_by = authedActions.userId;
+      }
+
+      if (action === "RETURNED") {
+        updatePatch.assigned_to = item.processed_by ?? item.assigned_to;
+      }
+
+
       // GAMMEL: skrev til varroa_submissions/varroa_submission_history
       // (gamle databasen). NY: submissions/submission_history. Historikk-
       // innsettingen bruker changed_by (ekte kolonnenavn) i stedet for
@@ -507,23 +511,26 @@ export function ProductionSubmissionClient() {
         .eq("id", item.id);
       if (updateRes.error) throw updateRes.error;
 
-      const historyRes = await supabase.from("submission_history").insert({
-        submission_id: item.id,
-        changed_by: authedActions.userId,
-        action: historyAction,
-        from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
-        to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
-        comment: historyComment,
-        payload: {
-          role: authedActions?.role,
-          mite_count: currentMiteCount,
-          image_quality: currentDraft.imageQuality || null,
-          training_ready: nextTrainingReady,
-          approved,
-          current_image_index: nextImageIndex,
-          total_images: images.length,
-        },
-      });
+
+      const historyRes = await supabase
+        .from("submission_history")
+        .insert({
+          submission_id: item.id,
+          changed_by: authedActions.userId,
+          action: historyAction,
+          from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
+          to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
+          comment: historyComment,
+          payload: {
+            role: authedActions?.role,
+            mite_count: currentMiteCount,
+            image_quality: currentDraft.imageQuality || null,
+            training_ready: nextTrainingReady,
+            approved,
+            current_image_index: nextImageIndex,
+            total_images: images.length,
+          },
+        });
       if (historyRes.error) throw historyRes.error;
 
       setSaveOk(`${getActionButtonLabel(action)} lagret.`);
