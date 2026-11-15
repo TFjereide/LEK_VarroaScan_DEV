@@ -2,6 +2,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let supabase: SupabaseClient | null = null;
 
+/**
+ * 
+ * @returns 
+ * @deprecated
+ */
 export function getSupabaseClient() {
   if (supabase) return supabase;
 
