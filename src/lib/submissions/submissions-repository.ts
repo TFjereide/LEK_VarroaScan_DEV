@@ -1,5 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
-import { createSignedImages, getAvailableNewSubmissionsCount, getNextsubmissionId, getSubmissionById, getSubmissions, SubmissionStatus, submitVarroaScan, SubmitVarroaScanResult, updateSubmissionStatus } from "../varroaSubmissionsDb";
+import { createSignedImages, getAvailableNewSubmissionsCount, getNextsubmissionId, getSubmissionById, getSubmissions, SubmissionStatus, submitVarroaScan, SubmitVarroaScanDbResult, SubmitVarroaScanResult, updateSubmissionStatus } from "../varroaSubmissionsDb";
 import { getSubmissionImagePaths, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "../varroaWorkflow";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { getClient } from "../auth/supabase.server";
@@ -9,7 +9,7 @@ import { VarroaReviewData } from "./submissions-types";
 
 
 export interface SubmissionsRepository{
-    insert(params: SubmissionSubmitParams): Promise<Result<SubmitVarroaScanResult>>;
+    insert(params: SubmissionSubmitParams): Promise<Result<SubmitVarroaScanDbResult>>;
     listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus): Promise<Result<VarroaSubmissionRecord[]>>;
     getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
     updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;

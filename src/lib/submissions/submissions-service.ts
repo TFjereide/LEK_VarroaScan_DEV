@@ -7,6 +7,7 @@ import { ErrorCode, makeResultData, makeResultError, Result } from "../result/re
 import { VarroaReviewData } from "./submissions-types";
 import { getClient } from "../auth/supabase.server";
 import { getDetector } from "../roboflow";
+import { InsertImageAnalysisResult } from "../varroaAnalysisResultsDb";
 
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.
@@ -21,25 +22,26 @@ export interface SubmissionsService {
     getReviewDataById(id:string): Promise<Result<VarroaReviewData>>;
 }
 
-async function analyzeImage(image: File){ 
-    const detector = getDetector();
-    const bytes = new Uint8Array(await image.arrayBuffer());
-    const result = await detector.analyze(bytes);
-    console.log({
-        type: image.type,
-        size: image.size,
-        firstBytes: Array.from(bytes.slice(0, 8)),
-    });
-    return result.count > result.countHigh? result.count : result.countHigh;
-}
+
 
 export function createSubmissionsService(repository: SubmissionsRepository):SubmissionsService{
     return {
         async submit(input: SubmissionSubmitParams){
+ 
+            async function analyzeImage(image: File){ 
+                const detector = getDetector();
+                const bytes = new Uint8Array(await image.arrayBuffer());
+                const result = await detector.analyze(bytes);
+                console.log({
+                    type: image.type,
+                    size: image.size,
+                    firstBytes: Array.from(bytes.slice(0, 8)),
+                });
+                return result.count > result.countHigh? result.count : result.countHigh;
+            }
+
             const file = input.files[0];
-            // const result = await repository.insert(input)
-            // if (!result.success) return result;
-            // 
+            
             let count = -1;
             try{
                 count = await analyzeImage(file);
@@ -50,19 +52,41 @@ export function createSubmissionsService(repository: SubmissionsRepository):Subm
                     error instanceof Error ? error.message : String(error),
                 )
             }
-            
-            // result.data = {
-                // submissionId: result.data.submissionId,
-                // imagePaths: result.data.imagePaths,
-                // count: count,
-            // };
-            
-            // return result ;
-            return makeResultData({
-                submissionId: "",
-                imagePaths: [],
-                count: count,
-            });
+            // Just for testing purposes. I don't want to upload a shitload of this stuff all the time.
+            const DOING_THE_SAVING = false;
+            if(DOING_THE_SAVING){
+                const result = await repository.insert(input)
+                if (!result.success) return result;
+    
+                // Temporary home of inserting results of the image in the DB
+                const analysisResult = await InsertImageAnalysisResult(await 
+                    getClient(),
+                    {
+                        image_id : result.data.imageIds[0],
+                        mite_estimate : count,
+                    }
+                );
+    
+                if (!analysisResult.success) return analysisResult;
+                
+                // return result ;
+                return makeResultData(
+                    {
+                        submissionId: result.data.submissionId,
+                        imagePaths: result.data.imagePaths,
+                        count: count,
+                    }   
+                );
+            }
+            return makeResultData(
+                {
+                    submissionId: "none",
+                    imagePaths: [],
+                    count: count,
+                }   
+            );
+
+
         },
 
         async listAll(page: number, limit: number, sortBy?: SubmissionSortType, byStatus?:SubmissionStatus){
