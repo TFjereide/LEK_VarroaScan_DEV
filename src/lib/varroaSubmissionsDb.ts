@@ -3,6 +3,7 @@ import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmis
 import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "./result/result";
 import { SubmissionSortType } from "./submissions/submissions-controller";
 import { Database } from "./supabase/database.types";
+import { VarroaAnalysisResult } from "./submissions/submissions-types";
 
 
 // (TGF)TODO: 
@@ -246,10 +247,14 @@ export type SubmitVarroaScanInput = {
   // onProgress?: (step: string) => void;
 };
 
-export type SubmitVarroaScanResult = {
+export type SubmitVarroaScanDbResult = {
   submissionId: string;
   imagePaths: string[];
+  imageIds: string[];
+  count?: number;
 };
+
+export type SubmitVarroaScanResult = Omit<SubmitVarroaScanDbResult, "imageIds">;
 
 /**
  * Høynivå-funksjon brukt av birøkter-skjemaet (app/page.tsx):
@@ -261,7 +266,7 @@ export type SubmitVarroaScanResult = {
 export async function submitVarroaScan(
   supabase: SupabaseClient,
   input: SubmitVarroaScanInput,
-): Promise<Result<SubmitVarroaScanResult>> {
+): Promise<Result<SubmitVarroaScanDbResult>> {
   try {
     const { files, note, type, source, deviceInfo, appVersion } = input;
     const submissionId = crypto.randomUUID();
@@ -279,6 +284,7 @@ export async function submitVarroaScan(
     if (insertRes.error) return supabaseErrorToResultError(insertRes.error);
 
     const imagePaths: string[] = [];
+    const imageIds : string[]= []
     for (const [index, file] of files.entries()) {
       // onProgress?.(`Laster opp bilde ${index + 1}/${files.length}`);
       const uploadRes = await uploadSubmissionImageFile(supabase, submissionId, file);
@@ -287,17 +293,21 @@ export async function submitVarroaScan(
       }
       const path = uploadRes.data;
       imagePaths.push(path);
-
+      
       // onProgress?.(`Registrerer bilde ${index + 1}/${files.length}`);
       const imgRes = await supabase.from("images").insert({
         submission_id: submissionId,
         image_path: path,
         quality: "ikke_vurdert",
         image_status: "pending",
-      });
+      })
+      .select()
+      .limit(1)
+      .single();
       if (imgRes.error) return supabaseErrorToResultError(imgRes.error);
+      imageIds.push(imgRes.data.image_id);
     }
-    return makeResultData({ submissionId, imagePaths });
+    return makeResultData({ submissionId, imagePaths, imageIds });
   } catch (error) {
     return makeResultError(
       ErrorCode.DATABASE_CONNECTION_ERROR,
@@ -306,6 +316,7 @@ export async function submitVarroaScan(
     );
   }
 }
+
 
 export async function getNextsubmissionId(supabase: SupabaseClient, userId: string, byStatus: SubmissionStatus): Promise<Result<string>> {
 

@@ -3,6 +3,7 @@ import { getCurrentUser } from "../auth/actions.server";
 import { getAuthorizedUserActions } from "../auth/roles.server";
 import { getClient } from "../auth/supabase.server";
 import { ErrorCode, makeResultData, makeResultError, Result, supabaseErrorToResultError } from "../result/result";
+import { getDetector } from "../roboflow";
 import { SubmitVarroaScanResult, SubmissionStatus  } from "../varroaSubmissionsDb";
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
 import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
@@ -13,6 +14,8 @@ import { VarroaReviewData } from "./submissions-types";
 The entrypoint the app uses to get and/or manipulate submissions.
 Every interaction is done through a series of server actions.
 */
+
+
 
 export async function submit(input: SubmissionSubmitParams):Promise<Result<SubmitVarroaScanResult>>{
     const authData = await getCurrentUser()
