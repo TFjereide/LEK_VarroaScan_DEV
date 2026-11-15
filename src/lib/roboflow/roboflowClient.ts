@@ -16,11 +16,9 @@ export async function callRoboflow(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        // (TGF)NOTE: Tydeligvis skal dette være i body, under api_key?
-        // Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        api_key: apiKey,
         inputs: {
           image: {
             type: "base64",
@@ -44,7 +42,7 @@ export async function callRoboflow(
 
   try {
     const json = await response.json(); 
-     console.log(
+    console.log(
     "========== RAW ROBOFLOW RESPONSE =========="
     );
     console.dir(json, { depth: null });
