@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AppRole } from "./auth/roles.types";
-import { ImageRecord } from "./varroaSubmissionsDb";
+import { ImageRecord } from "./submissions/submissions-database";
 
 export const VARROA_STATUSES = [
   "NY",

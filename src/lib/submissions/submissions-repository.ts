@@ -1,11 +1,12 @@
+import "server-only";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { createSignedImages, getAvailableNewSubmissionsCount, getNextsubmissionId, getSubmissionById, getSubmissions, SubmissionStatus, submitVarroaScan, SubmitVarroaScanDbResult, SubmitVarroaScanResult, updateSubmissionStatus } from "../varroaSubmissionsDb";
+import { createSignedImages, getAvailableNewSubmissionsCount, getNextsubmissionId, getSubmissionById, getSubmissions, submissionHistoryInsert, SubmissionStatus, submitVarroaScan, SubmitVarroaScanDbResult, SubmitVarroaScanResult, updateSubmissionById, updateSubmissionStatus } from "./submissions-database";
 import { getSubmissionImagePaths, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "../varroaWorkflow";
-import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { getClient } from "../auth/supabase.server";
 import { ErrorCode, Result, makeResultError, makeResultData } from "../result/result";
-import { getSubmissionHistoryById, getSubmissionReviewImagesById, getSubmissionReviewsById } from "../varroaSubmissionsDb";
-import { VarroaReviewData } from "./submissions-types";
+import { getSubmissionHistoryById} from "./submissions-database";
+import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams, VarroaReviewData } from "./submissions-types";
+import { getSubmissionReviewImagesById, getSubmissionReviewsById } from "../submission-reviews/submission-reviews-database";
 
 
 export interface SubmissionsRepository{
@@ -14,7 +15,7 @@ export interface SubmissionsRepository{
     getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
     updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;
     
-    getNext(userId:string, byStatus:SubmissionStatus): Promise<Result<string>>;
+    getNext(userId:string, byStatus:SubmissionStatus): Promise<Result<string|null>>;
     getCount(countType : SubmissionCountType): Promise<Result<number>>;
     getReviewDataById(id:string): Promise<Result<VarroaReviewData>>;
 }
@@ -35,7 +36,36 @@ export function createSubmissionsRepository(supabase: SupabaseClient): Submissio
         },
         
         async updateById(id:string, params: SubmissionUpdateParams){
-            // updateSubmission
+
+            const updateResult = await updateSubmissionById(
+                supabase,
+                id,
+                params
+            );
+            if(!updateResult.success) return updateResult;
+            // insert history
+            const historyInsertParams = {
+                submission_id: item.id,
+                changed_by: authedActions.userId,
+                action: historyAction,
+                from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
+                to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
+                comment: historyComment,
+                payload: {
+                    role: authedActions?.role params.role,
+                    mite_count: params.currentMiteCount,
+                    image_quality: currentDraft.imageQuality || null,
+                    training_ready: nextTrainingReady,
+                    approved,
+                    current_image_index: nextImageIndex,
+                    total_images: images.length,
+                },
+            };
+            const historyRes = await submissionHistoryInsert(supabase, historyInsertParams);
+            if (!historyRes.success) return historyRes;
+            
+
+
             return makeResultData(null);
         },
         

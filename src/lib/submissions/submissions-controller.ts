@@ -1,18 +1,12 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
-import { SubmissionStatus, SubmissionType, SubmitVarroaScanInput, SubmitVarroaScanResult } from "../varroaSubmissionsDb";
+import { SubmissionStatus, SubmissionType, SubmitVarroaScanInput, SubmitVarroaScanResult } from "./submissions-database";
 import { SubmissionsService } from "./submissions-service";
+import { SubmissionUpdate } from "./submissions-types";
 
 
 // NOTE: THis would be in use if we set up a REST-api of
 // some sort. Right now it will be useless.
-
-
-export type SubmissionCountType = "available-new" | "archived"
-export type SubmissionSortType = "created_at" | "updated_at" | "type" | "status" 
-
-export type SubmissionUpdateParams = Partial<VarroaSubmissionRecord>
-export type SubmissionSubmitParams = SubmitVarroaScanInput;
 
 // TODO: Send user along with data to see if the server side session and 
 // user session overlap. Can be good indicator of attack of some sort.

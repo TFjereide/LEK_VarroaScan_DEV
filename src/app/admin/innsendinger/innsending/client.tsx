@@ -48,7 +48,9 @@ import { createDraftFromImageReview, createEmptyImageDraft, extractAnnotationsFr
 import { SubmissionInfoCard } from "@/components/submissions/submissionInfoCard";
 import { Database } from "@/lib/supabase/database.types";
 import { getReviewDataById } from "@/lib/submissions/submissions-actions";
-import { VarroaReviewData } from "@/lib/submissions/submissions-types";
+import { SubmissionUpdate, VarroaReviewData } from "@/lib/submissions/submissions-types";
+import { getNextsubmissionIdForControl, getNextsubmissionIdUnderProcessing, submissionHistoryInsert, updateSubmissionById } from "@/lib/submissions/submissions-database";
+import { SubmissionUpdateParams } from "@/lib/submissions/submissions-controller";
 
 type SaveAction =
   | "SAVE_DRAFT"
@@ -380,7 +382,6 @@ export function ProductionSubmissionClient() {
     const historyToStatus = isImageStep ? null : nextStatus;
 
 
-    type SubmissionUpdate = Database["public"]["Tables"]["submissions"]["Update"];
 
 
    
@@ -395,7 +396,7 @@ export function ProductionSubmissionClient() {
       const reviewPayload = {
         submission_id: item.id,
         created_by: authedActions.userId,
-        mite_count: currentMiteCount,
+        mite_count: currentMiteCount ?? 0,
         image_quality: currentDraft.imageQuality || null,
         comment: historyComment,
         training_ready: nextTrainingReady,
@@ -439,17 +440,21 @@ export function ProductionSubmissionClient() {
           };
         }),
       };
-      const reviewRes = await supabase
-        .from("varroa_submission_reviews")
-        .upsert(reviewPayload, {
-          onConflict: "submission_id,created_by",
-        })
-        .select("id")
-        .single();
 
-      if (reviewRes.error) throw reviewRes.error;
-      const reviewId = String(reviewRes.data.id);
 
+      // const reviewRes = await supabase
+      //   .from("varroa_submission_reviews")
+      //   .upsert(reviewPayload, {
+      //     onConflict: "submission_id,created_by",
+      //   })
+      //   .select("id")
+      //   .single();
+
+      // if (reviewRes.error) throw reviewRes.error;
+      // const reviewId = String(reviewRes.data.id);
+      const reviewRes = await reviewUpsert(supabase, reviewPayload)
+      if (!reviewRes.success) throw reviewRes.error;
+      const reviewId = reviewRes.data;
 
       const imageReviewRows = draftEntries.map((draft) => ({
         ...(draft.id ? { id: draft.id } : {}),
@@ -467,14 +472,19 @@ export function ProductionSubmissionClient() {
         approved: approved || draft.approved,
       }));
 
-      const imageReviewRes = await supabase
-        .from("varroa_submission_review_images")
-        .upsert(imageReviewRows, {
-          onConflict: "review_id,image_index",
-          defaultToNull: false,
-        });
+      // const imageReviewRes = await supabase
+      //   .from("varroa_submission_review_images")
+      //   .upsert(imageReviewRows, {
+      //     onConflict: "review_id,image_index",
+      //     defaultToNull: false,
+      //   });
 
-      if (imageReviewRes.error) throw imageReviewRes.error;
+      // if (imageReviewRes.error) throw imageReviewRes.error;
+      
+      const imageReviewRes = await imageReviewUpsert(supabase, imageReviewRows);
+      if (!imageReviewRes.success) throw imageReviewRes.error;
+
+
 
 
       // GAMMEL: updatePatch skrev manual_mite_count/quality_rating/
@@ -485,7 +495,9 @@ export function ProductionSubmissionClient() {
       // som kolonner lenger - "hvem/når" for statusbytter er nå raden vi
       // uansett setter inn i submission_history rett under. updatePatch
       // beholder derfor bare de kolonnene som faktisk finnes på submissions.
-      const updatePatch: SubmissionUpdate = {
+
+
+      const updatePatch: SubmissionUpdateParams = {
         status: isVarroaSubmissionStatus(nextStatus) ? nextStatus: "UNDER_ARBEID",
         training_ready: nextTrainingReady,
       };
@@ -505,33 +517,41 @@ export function ProductionSubmissionClient() {
       // innsettingen bruker changed_by (ekte kolonnenavn) i stedet for
       // user_id - alias-navn som getHistorySelect() bruker på SELECT
       // virker ikke på INSERT, der må man bruke de faktiske kolonnenavnene.
-      const updateRes = await supabase
-        .from("submissions")
-        .update(updatePatch)
-        .eq("id", item.id);
-      if (updateRes.error) throw updateRes.error;
+      // const updateRes = await supabase  // moved
+      //   .from("submissions")
+      //   .update(updatePatch)
+      //   .eq("id", item.id);
+      // if (updateRes.error) throw updateRes.error;
 
 
-      const historyRes = await supabase
-        .from("submission_history")
-        .insert({
-          submission_id: item.id,
-          changed_by: authedActions.userId,
-          action: historyAction,
-          from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
-          to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
-          comment: historyComment,
-          payload: {
-            role: authedActions?.role,
-            mite_count: currentMiteCount,
-            image_quality: currentDraft.imageQuality || null,
-            training_ready: nextTrainingReady,
-            approved,
-            current_image_index: nextImageIndex,
-            total_images: images.length,
-          },
-        });
-      if (historyRes.error) throw historyRes.error;
+      const updateRes = await updateSubmissionById(supabase, item.id, updatePatch);
+      if(!updateRes.success) throw updateRes.error;
+
+      // insert history
+      const historyInsertParams = {
+        submission_id: item.id,
+        changed_by: authedActions.userId,
+        action: historyAction,
+        from_status: isVarroaSubmissionStatus( historyFromStatus) ? historyFromStatus : "UNDER_ARBEID" ,
+        to_status: isVarroaSubmissionStatus(historyToStatus) ? historyToStatus: "UNDER_ARBEID" ,
+        comment: historyComment,
+        payload: {
+          role: authedActions?.role,
+          mite_count: currentMiteCount,
+          image_quality: currentDraft.imageQuality || null,
+          training_ready: nextTrainingReady,
+          approved,
+          current_image_index: nextImageIndex,
+          total_images: images.length,
+        },
+      };
+
+      // const historyRes = await supabase
+      //   .from("submission_history")
+      //   .insert(historyInsertParams);
+      // if (historyRes.error) throw historyRes.error;
+      const historyRes = await submissionHistoryInsert(supabase, historyInsertParams);
+      if (!historyRes.success) throw historyRes.error;
 
       setSaveOk(`${getActionButtonLabel(action)} lagret.`);
 
@@ -546,18 +566,20 @@ export function ProductionSubmissionClient() {
         // .select("id")-spørring på "created_at" - som bare er et alias fra
         // getSubmissionSelect() og derfor ikke finnes utenfor den. NY:
         // riktig tabellnavn + sortering på den ekte kolonnen submission_date.
-        const nextControlRes = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("status", "KLAR_FOR_KONTROLL")
-          .neq("processed_by", authedActions.userId)
-          .neq("id", item.id)
-          .order("submission_date", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // const nextControlRes = await supabase
+        //   .from("submissions")
+        //   .select("id")
+        //   .eq("status", "KLAR_FOR_KONTROLL")
+        //   .neq("processed_by", authedActions.userId)
+        //   .neq("id", item.id)
+        //   .order("submission_date", { ascending: true })
+        //   .limit(1)
+        //   .maybeSingle();
+        // if (nextControlRes.error) throw nextControlRes.error;
+        const nextControlRes = await getNextsubmissionIdForControl(supabase, authedActions.userId, item.id)
+        if (!nextControlRes.success) throw nextControlRes.error;
 
-        if (nextControlRes.error) throw nextControlRes.error;
-        const nextId = String(nextControlRes.data?.id ?? "");
+        const nextId = nextControlRes.data;
         if (nextId) {
           window.location.assign(
             appendAdminContext(
@@ -568,18 +590,27 @@ export function ProductionSubmissionClient() {
           return;
         }
 
-        const underWorkRes = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("status", "UNDER_ARBEID")
-          .or(`assigned_to.eq.${authedActions.userId},processed_by.eq.${authedActions.userId}`)
-          .neq("id", item.id)
-          .order("updated_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // const underWorkRes = await supabase
+        //   .from("submissions")
+        //   .select("id")
+        //   .eq("status", "UNDER_ARBEID")
+        //   .or(`assigned_to.eq.${authedActions.userId},processed_by.eq.${authedActions.userId}`)
+        //   .neq("id", item.id)
+        //   .order("updated_at", { ascending: true })
+        //   .limit(1)
+        //   .maybeSingle();
 
-        if (underWorkRes.error) throw underWorkRes.error;
-        const resumeId = String(underWorkRes.data?.id ?? "");
+        // if (underWorkRes.error) throw underWorkRes.error;
+
+        const underWorkRes = await getNextsubmissionIdUnderProcessing(
+            supabase, 
+            authedActions.userId,
+            item.id,
+          );
+
+        if (!underWorkRes.success) throw underWorkRes.error;
+
+        const resumeId = underWorkRes.data;
         if (resumeId) {
           window.location.assign(
             appendAdminContext(
@@ -606,6 +637,7 @@ export function ProductionSubmissionClient() {
           await reload();
           return;
         }
+
         const nextRes = await supabase.rpc("varroa_claim_next_submission");
         if (nextRes.error) throw nextRes.error;
         const nextId = String(nextRes.data ?? "");
@@ -621,17 +653,26 @@ export function ProductionSubmissionClient() {
         // GAMMEL: .from("varroa_submissions"). NY: submissions - updated_at
         // er en ekte kolonne (satt automatisk av DB-triggeren), så
         // sorteringen her trengte ingen endring utover tabellnavnet.
-        const underWorkRes = await supabase
-          .from("submissions")
-          .select("id")
-          .eq("status", "UNDER_ARBEID")
-          .or(`assigned_to.eq.${authedActions.userId},processed_by.eq.${authedActions.userId}`)
-          .neq("id", item.id)
-          .order("updated_at", { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        // const underWorkRes = await supabase
+        //   .from("submissions")
+        //   .select("id")
+        //   .eq("status", "UNDER_ARBEID")
+        //   .or(`assigned_to.eq.${authedActions.userId},processed_by.eq.${authedActions.userId}`)
+        //   .neq("id", item.id)
+        //   .order("updated_at", { ascending: true })
+        //   .limit(1)
+        //   .maybeSingle();
 
-        if (underWorkRes.error) throw underWorkRes.error;
+        // if (underWorkRes.error) throw underWorkRes.error;
+        const underWorkRes = await getNextsubmissionIdUnderProcessing(
+            supabase, 
+            authedActions.userId,
+            item.id,
+          );
+
+        if (!underWorkRes.success) throw underWorkRes.error;
+
+
         const resumeId = String(underWorkRes.data?.id ?? "");
         if (resumeId) {
           window.location.assign(

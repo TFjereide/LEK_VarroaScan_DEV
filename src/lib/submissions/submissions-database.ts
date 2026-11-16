@@ -1,11 +1,12 @@
 import "server-only";
 import type { PostgrestResponse, PostgrestSingleResponse, SupabaseClient } from "@supabase/supabase-js";
-import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmissionImageReview, VarroaSubmissionRecord, VarroaSubmissionReview } from "./varroaWorkflow";
-import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "./result/result";
-import { SubmissionSortType } from "./submissions/submissions-controller";
-import { Database } from "./supabase/database.types";
-import { VarroaAnalysisResult } from "./submissions/submissions-types";
+import { getSubmissionSelect, SignedImage, VarroaSubmissionHistory, VarroaSubmissionRecord,} from "../varroaWorkflow";
+import { ErrorCode, Result, makeResultError, makeResultData, supabaseErrorToResultError, makeError, supabaseStorageErrorToResultError } from "../result/result";
+import { SubmissionSortType } from "./submissions-controller";
+import { Database } from "../supabase/database.types";
+import { VarroaAnalysisResult } from "./submissions-types";
 import { VarroaBoundingBox } from "@/components/submissions/zoomableAnnotatedImage";
+import { AppRole } from "../auth/roles.types";
 
 
 // (TGF)TODO: 
@@ -189,6 +190,12 @@ export async function updateSubmissionById(
   params: UpdateSubmissionParams,
 ): Promise<Result<null>> {
   try {  
+
+    // GAMMEL: skrev til varroa_submissions/varroa_submission_history
+    // (gamle databasen). NY: submissions/submission_history. Historikk-
+    // innsettingen bruker changed_by (ekte kolonnenavn) i stedet for
+    // user_id - alias-navn som getHistorySelect() bruker på SELECT
+    // virker ikke på INSERT, der må man bruke de faktiske kolonnenavnene.
     const res = await supabase
       .from("submissions")
       .update(params)
@@ -349,7 +356,12 @@ export async function submitVarroaScan(
 }
 
 
-export async function getNextsubmissionId(supabase: SupabaseClient, userId: string, byStatus: SubmissionStatus): Promise<Result<string>> {
+export async function getNextsubmissionId(
+    supabase: SupabaseClient, 
+    userId: string, 
+    byStatus: SubmissionStatus,
+    orderBy : "submission_date" | "updated_at" = "updated_at"
+  ): Promise<Result<string|null>> {
 
 
   // Kommentar til implementasjonen av dette på databasesiden
@@ -367,7 +379,7 @@ export async function getNextsubmissionId(supabase: SupabaseClient, userId: stri
       .select("id")
       .eq("status", byStatus)
       .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
-      .order("updated_at", { ascending: true })
+      .order(orderBy, { ascending: true })
       .limit(1)
       .maybeSingle();
 
@@ -384,25 +396,83 @@ export async function getNextsubmissionId(supabase: SupabaseClient, userId: stri
   }
 }
 
-// export async function getNextsubmissionForControlId(supabase :SupabaseClient, userId:string){
-//   // GAMMEL: .from("varroa_submissions"), og sorterte en bar
-//   // .select("id")-spørring på "created_at" - som bare er et alias fra
-//   // getSubmissionSelect() og ikke finnes utenfor den. NY: riktig
-//   // tabellnavn + sortering på den ekte kolonnen submission_date.
-//    const reviewRes = await supabase
-//       .from("submissions")
-//       .select("id")
-//       .eq("status", "KLAR_FOR_KONTROLL")
-//       .neq("processed_by", userId ?? "")
-//       .order("submission_date", { ascending: true })
-//       .limit(1)
-//       .maybeSingle();
+/**
+ * (tgf)TODO: Merge with getNextsubmissionId if possible.
+ * Make multimodal under byStatus switchcase maybe
+ */
+export async function getNextsubmissionIdForControl(
+    supabase: SupabaseClient, 
+    userId: string, 
+    itemId: string,
+    byStatus: SubmissionStatus = "KLAR_FOR_KONTROLL",
+    orderBy : "submission_date" | "updated_at" = "submission_date"
+  ): Promise<Result<string|null>> {
+  // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+  // .select("id")-spørring på "created_at" - som bare er et alias fra
+  // getSubmissionSelect() og derfor ikke finnes utenfor den. NY:
+  // riktig tabellnavn + sortering på den ekte kolonnen submission_date.
+  try {
+    const result = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("status", byStatus)
+      .neq("processed_by", userId)
+      .neq("id", itemId)
+      .order(orderBy, { ascending: true })
+      .limit(1)
+      .maybeSingle();
 
-//     if (reviewRes.error) throw reviewRes.error;
-//     const reviewId = String(reviewRes.data?.id ?? "");
+    if (result.error) return supabaseErrorToResultError(result.error);
+    const resumeId = String(result.data?.id ?? "");
 
-//     return reviewId;
-// }
+    return makeResultData(resumeId);
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
+ * (tgf)TODO: Merge with getNextsubmissionId if possible.
+ * Make multimodal under byStatus switchcase maybe
+ */
+export async function getNextsubmissionIdUnderProcessing(
+    supabase: SupabaseClient, 
+    userId: string, 
+    itemId: string,
+    byStatus: SubmissionStatus = "UNDER_ARBEID",
+    orderBy : "submission_date" | "updated_at" = "submission_date"
+  ): Promise<Result<string|null>> {
+  // GAMMEL: .from("varroa_submissions"), og sorterte en bar
+  // .select("id")-spørring på "created_at" - som bare er et alias fra
+  // getSubmissionSelect() og derfor ikke finnes utenfor den. NY:
+  // riktig tabellnavn + sortering på den ekte kolonnen submission_date.
+  try {
+    const result = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("status", byStatus)
+      .or(`assigned_to.eq.${userId},processed_by.eq.${userId}`)
+      .neq("id", itemId)
+      .order("updated_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (result.error) return supabaseErrorToResultError(result.error);
+    const resumeId = String(result.data?.id ?? "");
+
+    return makeResultData(resumeId);
+  } catch (error) {
+    return makeResultError(
+      ErrorCode.DATABASE_CONNECTION_ERROR,
+      "Failed to communicate with the database.",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
 
 
 export async function getSubmissionHistoryById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionHistory[]>> {
@@ -445,111 +515,41 @@ export async function getSubmissionHistoryById(supabase: SupabaseClient, id: str
   }
 }
 
-export async function getSubmissionReviewsById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionReview[]>> {
 
-  try {
-    const reviewsRes = await supabase
-      .from("varroa_submission_reviews")
-      .select(
-        "id,submission_id,created_at,updated_at,created_by,mite_count,image_quality,comment,training_ready,approved,current_image_index,image_notes",
-      )
-      .eq("submission_id", id)
-      .order("updated_at", { ascending: false })
-      .limit(20)
-
-    if (reviewsRes.error) {
-      // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-      //   setLoadError(getWorkflowMigrationMessage());
-      //   return;
-      // }
-      return supabaseErrorToResultError(reviewsRes.error);
-    }
-    const loadedReviews = (reviewsRes.data ?? []) as unknown as VarroaSubmissionReview[];
-    return makeResultData(loadedReviews);
-
-  } catch (error) {
-    return makeResultError(
-      ErrorCode.DATABASE_CONNECTION_ERROR,
-      "Failed to communicate with the database.",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-}
-
-export async function getSubmissionReviewImagesById(supabase: SupabaseClient, id: string): Promise<Result<VarroaSubmissionImageReview[]>> {
-
-  try {
-    const imageReviewsRes = await supabase
-      .from("varroa_submission_review_images")
-      .select(
-        "id,submission_id,review_id,created_at,updated_at,created_by,image_index,mite_count,image_quality,comment,training_ready,approved",
-      )
-      .eq("submission_id", id)
-      // NOTE: FUngerte etter at jeg tok dette vekk. Det virker ikke som om det
-      // burde være her heller?
-      // .eq("created_by", authedActions.userId)
-      .order("image_index", { ascending: true })
-    if (imageReviewsRes.error) {
-      // if (isMissingWorkflowSchemaError(imageReviewsRes.error)) {
-      //   setLoadError(getWorkflowMigrationMessage());
-      //   return;
-      // }
-      return supabaseErrorToResultError(imageReviewsRes.error);
-    }
-    const loadedImageReviews = (imageReviewsRes.data ?? []) as unknown as VarroaSubmissionImageReview[];
-    return makeResultData(loadedImageReviews);
-
-  } catch (error) {
-    return makeResultError(
-      ErrorCode.DATABASE_CONNECTION_ERROR,
-      "Failed to communicate with the database.",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-}
-
-type ImageNotes = {
-    image_index: number;
+type HistoryInsertParams = {
+  submission_id: string;
+  changed_by: string;
+  action: string;
+  from_status: "NY" | "UNDER_ARBEID" | "KLAR_FOR_KONTROLL" | "GODKJENT" | "KLAR_FOR_TRENING" | "ARKIVERT";
+  to_status: "NY" | "UNDER_ARBEID" | "KLAR_FOR_KONTROLL" | "GODKJENT" | "KLAR_FOR_TRENING" | "ARKIVERT";
+  comment: string | null;
+  payload: {
+    role: AppRole;
     mite_count: number | null;
     image_quality: string | null;
-    comment: string | null;
     training_ready: boolean;
     approved: boolean;
-    annotations: VarroaBoundingBox[];
-}[]
+    current_image_index: number;
+    total_images: number;
+  };
+}
 
-type ReviewUpsertParams = {
-        submission_id: string;
-        created_by: string;
-        mite_count: number;
-        image_quality: string | null;
-        comment: string | null;
-        training_ready: boolean;
-        approved: boolean;
-        current_image_index: number;
-        image_notes: ImageNotes
-      };
-
-export async function reviewUpsert(supabase: SupabaseClient<Database>, params : ReviewUpsertParams): Promise<Result<string>>{
+export async function submissionHistoryInsert(supabase: SupabaseClient<Database>, params : HistoryInsertParams): Promise<Result<null>>{
   try {
-    const reviewRes = await supabase
-        .from("varroa_submission_reviews")
-        .upsert(params, {
-          onConflict: "submission_id,created_by",
-        })
-        .select("id")
-        .single();
+      const result = await supabase
+        .from("submission_history")
+        .insert(params);
 
-      if (reviewRes.error) return supabaseErrorToResultError(reviewRes.error);
-      return makeResultData(reviewRes.data.id);
+        if (result.error) return supabaseErrorToResultError(result.error);
+        return makeResultData(null);
 
-  } catch (error) {
-    return makeResultError(
-      ErrorCode.DATABASE_CONNECTION_ERROR,
-      "Failed to communicate with the database.",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
+    } catch (error) {
+      return makeResultError(
+        ErrorCode.DATABASE_CONNECTION_ERROR,
+        "Failed to communicate with the database.",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
 }
 
 

@@ -1,10 +1,9 @@
 import { VarroaSubmissionRecord } from "../varroaWorkflow";
-import { SubmitVarroaScanResult } from "../varroaSubmissionsDb";
-import {  SubmissionStatus } from "../varroaSubmissionsDb";
+import { SubmitVarroaScanResult } from "./submissions-database";
+import {  SubmissionStatus } from "./submissions-database";
 import {createSubmissionsRepository, SubmissionsRepository } from "./submissions-repository";
-import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams } from "./submissions-controller";
 import { ErrorCode, makeResultData, makeResultError, Result } from "../result/result";
-import { VarroaReviewData } from "./submissions-types";
+import { SubmissionCountType, SubmissionSortType, SubmissionSubmitParams, SubmissionUpdateParams, VarroaReviewData } from "./submissions-types";
 import { getClient } from "../auth/supabase.server";
 import { getDetector } from "../roboflow";
 import { InsertImageAnalysisResult } from "../varroaAnalysisResultsDb";
@@ -17,9 +16,9 @@ export interface SubmissionsService {
     getById(id:string): Promise<Result<VarroaSubmissionRecord|null>>;
     updateById(id:string, params: SubmissionUpdateParams): Promise<Result<VarroaSubmissionRecord|null>>;
     
-    getNext(userId:string, byStatus:SubmissionStatus): Promise<Result<string>>;
+    getNext(userId:string, byStatus:SubmissionStatus): Promise<Result<string|null>>;
     getCount(countType : SubmissionCountType): Promise<Result<number>>;
-    getReviewDataById(id:string): Promise<Result<VarroaReviewData>>;
+    getReviewDataById(id:string): Promise<Result<VarroaReviewData|null>>;
 }
 
 
